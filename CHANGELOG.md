@@ -23,6 +23,12 @@
   SUCCEEDED/FAILED/CANCELLED 并写完成审计，`KernelAgentRunService` 在
   succeed/fail/cancel/cancelExecution 终态转移处自动触发，
   `AgentHandoffRepositoryPort` 新增 `findByChildRunId`（4 → 5 操作）。
+- Handoff 协作授权矩阵（Multi-Agent A2A 设计 §5.3 P0）：
+  `AgentCollaborationPolicyPort`（decide/savePolicy/listPolicies/deletePolicy，
+  端口 353 → 354）在 `createLocalHandoff` 对全部分派路径（agent-as-tool /
+  team 分派）强制 source→target 授权；内核默认实现为内存策略表（无显式
+  策略放行兼容既有链路），生产经 JDBC 适配器装载 `sa_agent_collaboration_policy`
+  （V62 迁移）收紧为显式 allowlist。
 - 错误契约（设计 §9）补齐 `traceId` 字段（tracing 启用时由 MDC 提供），
   `retryable` 语义、`UNAUTHORIZED`/`AUTH_SESSION_INVALID`/`DB_TIMEOUT` 等稳定 code。
 - UNKNOWN 工具调用对账机制：`ToolInvocationReconciliationService` 按 30 分钟宽限期

@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentCatalogQu
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentCheckpointRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentEvalSummaryRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentHandoffRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentCollaborationPolicyAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentTeamRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRolloutRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentRunEventBufferAdapter;
@@ -61,6 +62,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointReposit
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentDefinitionRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentEvalSummaryRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCollaborationPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentTeamRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentPublishCheckRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentRolloutRepositoryPort;
@@ -282,6 +284,14 @@ public class SeahorseAgentRegistryRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(AgentHandoffRepositoryPort.class)
     public JdbcAgentHandoffRepositoryAdapter seahorseJdbcAgentHandoffRepositoryAdapter(DataSource dataSource) {
         return new JdbcAgentHandoffRepositoryAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type", havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(AgentCollaborationPolicyPort.class)
+    public JdbcAgentCollaborationPolicyAdapter seahorseJdbcAgentCollaborationPolicyAdapter(DataSource dataSource) {
+        return new JdbcAgentCollaborationPolicyAdapter(dataSource);
     }
 
     @Bean

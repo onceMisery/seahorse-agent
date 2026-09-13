@@ -1,6 +1,6 @@
 # Public Port Inventory and Retirement Rules
 
-Updated: 2026-09-13 (metadata governance trio consolidation + agent team feature ports)
+Updated: 2026-09-13 (team feature ports + collaboration policy enforcement)
 Authority: `PortArchitectureTest` and compiled source under
 `com.miracle.ai.seahorse.agent.ports`
 
@@ -9,9 +9,9 @@ Authority: `PortArchitectureTest` and compiled source under
 | Direction | Public interfaces | Meaning |
 | --- | ---: | --- |
 | Inbound | 93 | Capability entry points called by delivery adapters or other capabilities |
-| Outbound | 259 | Independently replaceable external/runtime boundaries |
+| Outbound | 260 | Independently replaceable external/runtime boundaries |
 | Common | 1 | Shared boundary outside the directional packages |
-| Total | 353 | Reviewed ceiling; must only decrease |
+| Total | 354 | Reviewed ceiling; must only decrease |
 
 The inventory is measured by the public-interface ArchUnit scan, not by source
 file count. The duplicate `SreHealthReportProviderPort` boundary was retired
@@ -30,10 +30,14 @@ justification so it is not mistaken for consolidation drift:
 - `AgentTeamRepositoryPort` (outbound, 6 operations) is the persistence
   boundary for `AgentTeamDefinition` and `AgentTeamRun` aggregates with a
   JDBC adapter; replacing the store must not touch the orchestration engine.
+- `AgentCollaborationPolicyPort` (outbound, 4 operations: decide/savePolicy/
+  listPolicies/deletePolicy) is the source-to-target handoff authorization
+  boundary (design §5.3); enforced inside `createLocalHandoff` for every
+  dispatch path, backed by `sa_agent_collaboration_policy` via JDBC.
 - Consolidation balances remain: the four consolidation waves below brought
-  legacy ports 360 -> 351, and the feature added 2, for the current 353.
+  legacy ports 360 -> 351, and the team features added 3, for the current 354.
 
-The 786 Java files under `ports` are informational package-hygiene data, not
+The 787 Java files under `ports` are informational package-hygiene data, not
 the Port count. Records, enums, commands, responses, and other value objects do
 not become architectural Ports merely because they are stored in that package.
 
@@ -281,10 +285,12 @@ that forbids the merge.
 | metadata management trio | MetadataExtractionResultRepositoryPort (5, merged), MetadataQuarantinePort (5, merged), MetadataReviewQueuePort (5, merged) | DONE | write+governance views of one aggregate per port merged this cycle (§6.2) |
 
 | agent team orchestration | AgentTeamInboundPort (5), AgentTeamRepositoryPort (6) | DONE | new P1 capability added this cycle with §6.3 justification (see inventory header) |
+| handoff collaboration policy | AgentCollaborationPolicyPort (4) | DONE | new P0 authorization boundary added this cycle with §6.3 justification (see inventory header) |
 
 Review outcome: 351 was the honest consolidation floor for this cycle, reached
 with the metadata trio merge above, without breaching §6.3/§6.5. The agent team
-P1 feature then added 2 justified capability ports (351 -> 353). Reaching 300
+P1 feature then added 3 justified capability ports (351 -> 354: two team
+ports plus the collaboration policy boundary). Reaching 300
 requires capability-level API redesign (reducing operation counts of
 legacy-budget ports and collapsing small capabilities into their parents),
 which is a feature-cycle decision, not a consolidation-mechanical one.

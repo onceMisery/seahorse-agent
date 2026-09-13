@@ -36,6 +36,9 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentHandoffInboundPort
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunStartCommand;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentHandoffRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCollaborationPolicyPort;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentCollaborationPolicyRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentCollaborationPolicyDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.MeshPolicyPort;
 
 import java.time.Clock;
@@ -53,6 +56,7 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
     private final AgentHandoffRepositoryPort handoffRepository;
     private final AgentRunInboundPort runPort;
     private final MeshPolicyPort meshPolicyPort;
+    private final AgentCollaborationPolicyPort collaborationPolicyPort;
     private final KernelAuditLedgerService auditLedger;
     private final Clock clock;
 
@@ -60,7 +64,7 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
                                      AgentRunInboundPort runPort,
                                      MeshPolicyPort meshPolicyPort,
                                      Clock clock) {
-        this(handoffRepository, runPort, meshPolicyPort, null, clock);
+        this(handoffRepository, runPort, meshPolicyPort, null, null, clock);
     }
 
     public KernelAgentHandoffService(AgentHandoffRepositoryPort handoffRepository,
@@ -68,9 +72,19 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
                                      MeshPolicyPort meshPolicyPort,
                                      KernelAuditLedgerService auditLedger,
                                      Clock clock) {
+        this(handoffRepository, runPort, meshPolicyPort, null, auditLedger, clock);
+    }
+
+    public KernelAgentHandoffService(AgentHandoffRepositoryPort handoffRepository,
+                                     AgentRunInboundPort runPort,
+                                     MeshPolicyPort meshPolicyPort,
+                                     AgentCollaborationPolicyPort collaborationPolicyPort,
+                                     KernelAuditLedgerService auditLedger,
+                                     Clock clock) {
         this.handoffRepository = Objects.requireNonNull(handoffRepository, "handoffRepository must not be null");
         this.runPort = Objects.requireNonNull(runPort, "runPort must not be null");
         this.meshPolicyPort = Objects.requireNonNull(meshPolicyPort, "meshPolicyPort must not be null");
+        this.collaborationPolicyPort = collaborationPolicyPort;
         this.auditLedger = auditLedger;
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
     }
@@ -79,6 +93,7 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
         AgentHandoffCreateCommand safeCommand = Objects.requireNonNull(command, "command must not be null");
         requireReadableParentRun(safeCommand.parentRunId());
         Instant now = clock.instant();
+        AgentCollaborationPolicyDecision deniedByCollaborationPolicy = null;
         MeshPolicyDecision decision = meshPolicyPort.decide(new MeshPolicyRequest(
                 safeCommand.tenantId(),
                 safeCommand.parentRunId(),
@@ -86,6 +101,19 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
                 safeCommand.targetAgentId(),
                 safeCommand.depth(),
                 safeCommand.ancestorAgentIds()));
+        if (decision.allowed() && collaborationPolicyPort != null) {
+            AgentCollaborationPolicyDecision collaboration = collaborationPolicyPort.decide(
+                    new AgentCollaborationPolicyRequest(
+                            safeCommand.tenantId(),
+                            safeCommand.sourceAgentId(),
+                            safeCommand.targetAgentId(),
+                            safeCommand.depth(),
+                            safeCommand.ancestorAgentIds(),
+                            List.of()));
+            if (!collaboration.allowed()) {
+                deniedByCollaborationPolicy = collaboration;
+            }
+        }
         AgentHandoff created = new AgentHandoff(
                 nextHandoffId(),
                 safeCommand.tenantId(),
@@ -102,8 +130,11 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
                 now,
                 now,
                 null);
-        if (!decision.allowed()) {
-            AgentHandoff failed = handoffRepository.save(created.fail(decision.failureCode(), now));
+        if (!decision.allowed() || deniedByCollaborationPolicy != null) {
+            AgentHandoffFailureCode failureCode = deniedByCollaborationPolicy != null
+                    ? deniedByCollaborationPolicy.failureCode()
+                    : decision.failureCode();
+            AgentHandoff failed = handoffRepository.save(created.fail(failureCode, now));
             appendCreatedAudit(failed);
             appendFinishedAudit(failed);
             return failed;

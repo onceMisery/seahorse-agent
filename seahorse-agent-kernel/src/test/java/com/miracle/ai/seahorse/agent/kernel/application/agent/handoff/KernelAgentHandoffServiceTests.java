@@ -26,6 +26,8 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditRedactionPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditWriteFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffFailureCode;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentCollaborationPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRun;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentRunStatus;
@@ -149,6 +151,74 @@ class KernelAgentHandoffServiceTests {
                 List.of("source-agent"),
                 "trace-1")));
         assertEquals(0, runPort.startedCommands.size());
+    }
+
+    @Test
+    void shouldDenyHandoffWhenCollaborationPolicyRejectsSource() {
+        MemoryAgentHandoffRepository repository = new MemoryAgentHandoffRepository();
+        RecordingRunPort runPort = new RecordingRunPort();
+        DefaultAgentCollaborationPolicyPort policyPort = new DefaultAgentCollaborationPolicyPort();
+        policyPort.savePolicy(new AgentCollaborationPolicy(
+                "p-1", "tenant-1", "source-agent", "target-agent", false, null));
+        KernelAgentHandoffService service = new KernelAgentHandoffService(
+                repository,
+                runPort,
+                new DefaultMeshPolicyPort(),
+                policyPort,
+                null,
+                FIXED_CLOCK);
+
+        AgentHandoff handoff = service.createLocalHandoff(new AgentHandoffCreateCommand(
+                "tenant-1",
+                "parent-run-1",
+                "source-agent",
+                "target-agent",
+                null,
+                "delegate work",
+                null,
+                "input",
+                null,
+                1,
+                List.of("source-agent"),
+                null));
+
+        assertEquals(AgentHandoffStatus.FAILED, handoff.status());
+        assertEquals(AgentHandoffFailureCode.POLICY_DENIED, handoff.failureCode());
+        // 被授权策略拒绝的分派不得创建 child run
+        assertEquals(0, runPort.startedCommands.size());
+    }
+
+    @Test
+    void shouldAllowHandoffWhenCollaborationPolicyAllowsSource() {
+        MemoryAgentHandoffRepository repository = new MemoryAgentHandoffRepository();
+        RecordingRunPort runPort = new RecordingRunPort();
+        DefaultAgentCollaborationPolicyPort policyPort = new DefaultAgentCollaborationPolicyPort();
+        policyPort.savePolicy(new AgentCollaborationPolicy(
+                "p-1", "tenant-1", "source-agent", "target-agent", true, null));
+        KernelAgentHandoffService service = new KernelAgentHandoffService(
+                repository,
+                runPort,
+                new DefaultMeshPolicyPort(),
+                policyPort,
+                null,
+                FIXED_CLOCK);
+
+        AgentHandoff handoff = service.createLocalHandoff(new AgentHandoffCreateCommand(
+                "tenant-1",
+                "parent-run-1",
+                "source-agent",
+                "target-agent",
+                null,
+                "delegate work",
+                null,
+                "input",
+                null,
+                1,
+                List.of("source-agent"),
+                null));
+
+        assertEquals(AgentHandoffStatus.RUNNING, handoff.status());
+        assertEquals(1, runPort.startedCommands.size());
     }
 
     @Test

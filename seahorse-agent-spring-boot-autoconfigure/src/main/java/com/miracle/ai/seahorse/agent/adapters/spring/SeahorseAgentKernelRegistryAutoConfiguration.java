@@ -50,6 +50,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.factory.KernelAgen
 import com.miracle.ai.seahorse.agent.kernel.application.agent.gate.KernelProductionGateService;
 import com.miracle.ai.seahorse.agent.kernel.application.gate.KernelGateResultService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.DefaultMeshPolicyPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.DefaultAgentCollaborationPolicyPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.KernelAgentHandoffService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.handoff.AgentHandoffCompletionService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.quota.KernelQuotaDecisionService;
@@ -136,6 +137,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.ContextPackRepositoryP
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.CostUsageRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.EnterprisePilotReadinessRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.MeshPolicyPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCollaborationPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.OpenApiSpecParserPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ProductionGateRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.gate.GateResultRepositoryPort;
@@ -555,6 +557,12 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(AgentCollaborationPolicyPort.class)
+    public DefaultAgentCollaborationPolicyPort seahorseAgentCollaborationPolicyPort() {
+        return new DefaultAgentCollaborationPolicyPort();
+    }
+
+    @Bean
     @ConditionalOnBean(AgentHandoffRepositoryPort.class)
     @ConditionalOnMissingBean(AgentHandoffCompletionService.class)
     public AgentHandoffCompletionService seahorseAgentHandoffCompletionService(
@@ -574,12 +582,14 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
             AgentHandoffRepositoryPort agentHandoffRepositoryPort,
             AgentRunInboundPort agentRunInboundPort,
             MeshPolicyPort meshPolicyPort,
+            ObjectProvider<AgentCollaborationPolicyPort> collaborationPolicyProvider,
             ObjectProvider<KernelAuditLedgerService> auditLedgerService,
             ObjectProvider<Clock> clockProvider) {
         return new KernelAgentHandoffService(
                 agentHandoffRepositoryPort,
                 agentRunInboundPort,
                 meshPolicyPort,
+                collaborationPolicyProvider.getIfAvailable(),
                 auditLedgerService.getIfAvailable(),
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }

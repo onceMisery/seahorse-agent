@@ -146,6 +146,7 @@ public class JdbcChatSchemaUpgrade {
         widenColumns("t_message", List.of("id", "conversation_id", "user_id"));
         ensureMessageRunLinkage();
         ensureAgentSkillTables();
+        ensureAgentCollaborationPolicyTable();
         ensureAgentTeamTables();
         widenColumns("t_message_feedback", List.of("id", "message_id", "conversation_id", "user_id"));
         alterColumnToVarcharIfExists("t_rag_trace_run", "conversation_id", TARGET_LENGTH);
@@ -1013,6 +1014,25 @@ public class JdbcChatSchemaUpgrade {
             String memoryScopeJson,
             String guardrailConfigJson,
             String presetKey) {
+    }
+
+    private void ensureAgentCollaborationPolicyTable() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_agent_collaboration_policy (
+                    policy_id       VARCHAR(64)  PRIMARY KEY,
+                    tenant_id       VARCHAR(64)  NOT NULL,
+                    source_agent_id VARCHAR(64)  NOT NULL,
+                    target_agent_id VARCHAR(64)  NOT NULL,
+                    allowed         BOOLEAN      NOT NULL,
+                    max_depth       INTEGER,
+                    created_at      TIMESTAMP    NOT NULL,
+                    updated_at      TIMESTAMP    NOT NULL
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_agent_collab_policy_pair
+                    ON sa_agent_collaboration_policy (tenant_id, source_agent_id, target_agent_id)
+                """);
     }
 
     private void ensureAgentTeamTables() {
