@@ -20,11 +20,10 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.kernel.support.SnowflakeIds;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRecord;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -39,8 +38,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-public class JdbcMetadataExtractionResultRepositoryAdapter implements MetadataExtractionResultRepositoryPort,
-        MetadataExtractionResultManagementRepositoryPort {
+public class JdbcMetadataExtractionResultRepositoryAdapter implements MetadataExtractionResultRepositoryPort {
 
     private final JdbcTemplate jdbcTemplate;
     private final JdbcMetadataJsonSupport jsonSupport;

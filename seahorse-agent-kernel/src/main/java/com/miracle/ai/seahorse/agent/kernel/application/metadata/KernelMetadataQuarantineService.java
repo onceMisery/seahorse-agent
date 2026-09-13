@@ -2,7 +2,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineRetryCommand;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRecord;
@@ -24,24 +24,24 @@ public class KernelMetadataQuarantineService implements MetadataQuarantineInboun
     private static final int DEFAULT_MAX_RETRY_COUNT = 3;
     private static final String EVENT_QUARANTINE_ACTION_COMPLETED = "metadata.quarantine.action.completed";
 
-    private final MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort;
+    private final MetadataQuarantinePort quarantineRepositoryPort;
     private final int maxRetryCount;
     private final ObservationPort observationPort;
 
-    public KernelMetadataQuarantineService(MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort) {
+    public KernelMetadataQuarantineService(MetadataQuarantinePort quarantineRepositoryPort) {
         this(quarantineRepositoryPort, DEFAULT_MAX_RETRY_COUNT);
     }
 
-    public KernelMetadataQuarantineService(MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort,
+    public KernelMetadataQuarantineService(MetadataQuarantinePort quarantineRepositoryPort,
                                            int maxRetryCount) {
         this(quarantineRepositoryPort, maxRetryCount, null);
     }
 
-    public KernelMetadataQuarantineService(MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort,
+    public KernelMetadataQuarantineService(MetadataQuarantinePort quarantineRepositoryPort,
                                            int maxRetryCount,
                                            ObservationPort observationPort) {
         this.quarantineRepositoryPort = Objects.requireNonNullElse(quarantineRepositoryPort,
-                MetadataQuarantineManagementRepositoryPort.empty());
+                MetadataQuarantinePort.empty());
         this.maxRetryCount = maxRetryCount <= 0 ? DEFAULT_MAX_RETRY_COUNT : maxRetryCount;
         this.observationPort = observationPort;
     }

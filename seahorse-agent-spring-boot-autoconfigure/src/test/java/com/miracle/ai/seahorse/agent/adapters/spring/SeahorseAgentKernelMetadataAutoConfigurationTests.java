@@ -46,11 +46,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
@@ -128,15 +125,15 @@ class SeahorseAgentKernelMetadataAutoConfigurationTests {
                             .isInstanceOf(JdbcMetadataDictionaryRepositoryAdapter.class);
                     assertThat(context.getBean(MetadataExtractionResultRepositoryPort.class))
                             .isInstanceOf(JdbcMetadataExtractionResultRepositoryAdapter.class);
-                    assertThat(context.getBean(MetadataExtractionResultManagementRepositoryPort.class))
+                    assertThat(context.getBean(MetadataExtractionResultRepositoryPort.class))
                             .isInstanceOf(JdbcMetadataExtractionResultRepositoryAdapter.class);
                     assertThat(context.getBean(MetadataReviewQueuePort.class))
                             .isInstanceOf(JdbcMetadataReviewRepositoryAdapter.class);
-                    assertThat(context.getBean(MetadataReviewManagementRepositoryPort.class))
+                    assertThat(context.getBean(MetadataReviewQueuePort.class))
                             .isInstanceOf(JdbcMetadataReviewRepositoryAdapter.class);
                     assertThat(context.getBean(MetadataQuarantinePort.class))
                             .isInstanceOf(JdbcMetadataQuarantineRepositoryAdapter.class);
-                    assertThat(context.getBean(MetadataQuarantineManagementRepositoryPort.class))
+                    assertThat(context.getBean(MetadataQuarantinePort.class))
                             .isInstanceOf(JdbcMetadataQuarantineRepositoryAdapter.class);
                     assertThat(context.getBean(MetadataCanonicalWritePort.class))
                             .isInstanceOf(JdbcMetadataCanonicalWriteRepositoryAdapter.class);

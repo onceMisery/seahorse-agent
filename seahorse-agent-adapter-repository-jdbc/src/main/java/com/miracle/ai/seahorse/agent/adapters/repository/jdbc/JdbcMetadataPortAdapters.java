@@ -29,15 +29,13 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryI
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRecord;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReport;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineQuery;
@@ -47,10 +45,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineR
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldCapabilityRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaFieldPayload;
@@ -102,27 +99,12 @@ public final class JdbcMetadataPortAdapters {
         return new ExtractionResultAdapter(delegate);
     }
 
-    public static MetadataExtractionResultManagementRepositoryPort extractionResultManagement(
-            JdbcMetadataGovernanceRepositoryAdapter delegate) {
-        return new ExtractionResultManagementAdapter(delegate);
-    }
-
     public static MetadataReviewQueuePort reviewQueue(JdbcMetadataGovernanceRepositoryAdapter delegate) {
         return new ReviewQueueAdapter(delegate);
     }
 
-    public static MetadataReviewManagementRepositoryPort reviewManagement(
-            JdbcMetadataGovernanceRepositoryAdapter delegate) {
-        return new ReviewManagementAdapter(delegate);
-    }
-
     public static MetadataQuarantinePort quarantine(JdbcMetadataGovernanceRepositoryAdapter delegate) {
         return new QuarantineAdapter(delegate);
-    }
-
-    public static MetadataQuarantineManagementRepositoryPort quarantineManagement(
-            JdbcMetadataGovernanceRepositoryAdapter delegate) {
-        return new QuarantineManagementAdapter(delegate);
     }
 
     public static MetadataCanonicalWritePort canonicalWrite(JdbcMetadataGovernanceRepositoryAdapter delegate) {
@@ -287,14 +269,6 @@ public final class JdbcMetadataPortAdapters {
                                          String extractorVersion) {
             return delegate.hasAcceptedResult(tenantId, knowledgeBaseId, documentId, schemaVersion, extractorVersion);
         }
-    }
-
-    private static final class ExtractionResultManagementAdapter extends DelegateAdapter
-            implements MetadataExtractionResultManagementRepositoryPort {
-
-        ExtractionResultManagementAdapter(JdbcMetadataGovernanceRepositoryAdapter delegate) {
-            super(delegate);
-        }
 
         @Override
         public MetadataExtractionResultPage pageExtractionResults(MetadataExtractionResultQuery query) {
@@ -316,14 +290,6 @@ public final class JdbcMetadataPortAdapters {
         @Override
         public void enqueue(MetadataReviewItem item) {
             delegate.enqueue(item);
-        }
-    }
-
-    private static final class ReviewManagementAdapter extends DelegateAdapter
-            implements MetadataReviewManagementRepositoryPort {
-
-        ReviewManagementAdapter(JdbcMetadataGovernanceRepositoryAdapter delegate) {
-            super(delegate);
         }
 
         @Override
@@ -356,14 +322,6 @@ public final class JdbcMetadataPortAdapters {
         @Override
         public void quarantine(MetadataQuarantineItem item) {
             delegate.quarantine(item);
-        }
-    }
-
-    private static final class QuarantineManagementAdapter extends DelegateAdapter
-            implements MetadataQuarantineManagementRepositoryPort {
-
-        QuarantineManagementAdapter(JdbcMetadataGovernanceRepositoryAdapter delegate) {
-            super(delegate);
         }
 
         @Override

@@ -17,7 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRecord;
@@ -30,6 +31,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import java.util.ArrayList;
 
 class KernelMetadataExtractionResultServiceTests {
 
@@ -53,7 +55,7 @@ class KernelMetadataExtractionResultServiceTests {
     @Test
     void shouldRejectBlankIdentity() {
         KernelMetadataExtractionResultService service =
-                new KernelMetadataExtractionResultService(MetadataExtractionResultManagementRepositoryPort.empty());
+                new KernelMetadataExtractionResultService(MetadataExtractionResultRepositoryPort.empty());
 
         assertThatThrownBy(() -> service.page("", "", "", "", "", 1, 10))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -64,9 +66,15 @@ class KernelMetadataExtractionResultServiceTests {
     }
 
     private static class InMemoryExtractionResultRepository
-            implements MetadataExtractionResultManagementRepositoryPort {
+            implements MetadataExtractionResultRepositoryPort {
 
         private MetadataExtractionResultQuery lastQuery;
+        private final List<MetadataExtractionRecord> saved = new ArrayList<>();
+
+        @Override
+        public void save(MetadataExtractionRecord record) {
+            saved.add(record);
+        }
 
         @Override
         public MetadataExtractionResultPage pageExtractionResults(MetadataExtractionResultQuery query) {

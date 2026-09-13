@@ -21,10 +21,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,8 +33,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-public class JdbcMetadataReviewRepositoryAdapter implements MetadataReviewQueuePort,
-        MetadataReviewManagementRepositoryPort {
+public class JdbcMetadataReviewRepositoryAdapter implements MetadataReviewQueuePort {
 
     private final JdbcMetadataReviewSupport reviewSupport;
     private final JdbcMetadataExtractionResultRepositoryAdapter extractionResultRepositoryAdapter;

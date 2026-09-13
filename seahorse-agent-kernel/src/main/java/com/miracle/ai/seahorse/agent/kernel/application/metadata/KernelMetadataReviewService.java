@@ -9,7 +9,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineI
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
@@ -35,20 +35,20 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
     private static final String DEFAULT_OPERATOR = "system";
     private static final String EVENT_REVIEW_DECISION_COMPLETED = "metadata.review.decision.completed";
 
-    private final MetadataReviewManagementRepositoryPort reviewRepositoryPort;
+    private final MetadataReviewQueuePort reviewRepositoryPort;
     private final MetadataCanonicalWritePort canonicalWritePort;
     private final MetadataQuarantinePort quarantinePort;
     private final MetadataIndexCompensationPort indexCompensationPort;
     private final MetadataReviewReExtractPort reExtractPort;
     private final ObservationPort observationPort;
 
-    public KernelMetadataReviewService(MetadataReviewManagementRepositoryPort reviewRepositoryPort,
+    public KernelMetadataReviewService(MetadataReviewQueuePort reviewRepositoryPort,
                                        MetadataCanonicalWritePort canonicalWritePort,
                                        MetadataQuarantinePort quarantinePort) {
         this(reviewRepositoryPort, canonicalWritePort, quarantinePort, MetadataIndexCompensationPort.noop());
     }
 
-    public KernelMetadataReviewService(MetadataReviewManagementRepositoryPort reviewRepositoryPort,
+    public KernelMetadataReviewService(MetadataReviewQueuePort reviewRepositoryPort,
                                        MetadataCanonicalWritePort canonicalWritePort,
                                        MetadataQuarantinePort quarantinePort,
                                        MetadataIndexCompensationPort indexCompensationPort) {
@@ -56,7 +56,7 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
                 MetadataReviewReExtractPort.noop());
     }
 
-    public KernelMetadataReviewService(MetadataReviewManagementRepositoryPort reviewRepositoryPort,
+    public KernelMetadataReviewService(MetadataReviewQueuePort reviewRepositoryPort,
                                        MetadataCanonicalWritePort canonicalWritePort,
                                        MetadataQuarantinePort quarantinePort,
                                        MetadataIndexCompensationPort indexCompensationPort,
@@ -64,14 +64,14 @@ public class KernelMetadataReviewService implements MetadataReviewInboundPort {
         this(reviewRepositoryPort, canonicalWritePort, quarantinePort, indexCompensationPort, reExtractPort, null);
     }
 
-    public KernelMetadataReviewService(MetadataReviewManagementRepositoryPort reviewRepositoryPort,
+    public KernelMetadataReviewService(MetadataReviewQueuePort reviewRepositoryPort,
                                        MetadataCanonicalWritePort canonicalWritePort,
                                        MetadataQuarantinePort quarantinePort,
                                        MetadataIndexCompensationPort indexCompensationPort,
                                        MetadataReviewReExtractPort reExtractPort,
                                        ObservationPort observationPort) {
         this.reviewRepositoryPort = Objects.requireNonNullElse(reviewRepositoryPort,
-                MetadataReviewManagementRepositoryPort.empty());
+                MetadataReviewQueuePort.empty());
         this.canonicalWritePort = Objects.requireNonNullElse(canonicalWritePort, MetadataCanonicalWritePort.noop());
         this.quarantinePort = Objects.requireNonNullElse(quarantinePort, MetadataQuarantinePort.noop());
         this.indexCompensationPort = Objects.requireNonNullElse(indexCompensationPort,

@@ -37,12 +37,15 @@
 - `AiModelConfigController` 六个端点吞掉认证异常导致登录过期返回 200 错误信封的问题。
 - 前端 SSE 终态幂等：同一序列号去重、首个终态事件后忽略迟到事件。
 - 取消语义闭环：客户端预生成 taskId、引擎侧取消落 `CANCELLED` 终态、迟到回调幂等。
-- 同聚合仓储 Port 碎片合并（三波）：`AgentRunQueue`→`AgentRunLease`、
+- 同聚合仓储 Port 碎片合并（四波）：`AgentRunQueue`→`AgentRunLease`、
   `MemoryReviewCandidate`→`MemoryReviewManagementRepositoryPort`、
   `BillLineItem`→`Bill`、`PaymentCallbackLog`→`PaymentOrder`、
   `MemoryRecallGoldenHarness`→`MemoryRecallEvaluation`、
-  `SandboxArtifactQuery`→`SandboxArtifactPort`（Port 360 → 354；含用户
-  metadata WIP 后为 351）。
+  `SandboxArtifactQuery`→`SandboxArtifactPort`、
+  `MetadataExtractionResultManagement`→`MetadataExtractionResultRepositoryPort`、
+  `MetadataQuarantineManagement`→`MetadataQuarantinePort`、
+  `MetadataReviewManagement`→`MetadataReviewQueuePort`
+  （Port 360 → 351）。
 - 跨子域边溶解：SkillRuntimeComposer/SkillSetJsonSupport/RunContextSnapshotRedactor
   移入 domain，chat 相关跨域白名单 47 → 40（回到 Phase 0 水位）。
 - 复杂度报告 `--update-baseline` 不再丢失手工维护的基线字段。

@@ -18,7 +18,8 @@
 package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataQuarantineRetryCommand;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineRecord;
@@ -45,7 +46,7 @@ class KernelMetadataQuarantineServiceTests {
     @Test
     void shouldResolveAndScheduleRetryThroughRepository() {
         InMemoryQuarantineRepository repository = new InMemoryQuarantineRepository();
-        repository.put(quarantine("q-1", false, 1, null));
+        repository.put(quarantineRecord("q-1", false, 1, null));
         RecordingObservationPort observationPort = new RecordingObservationPort();
         KernelMetadataQuarantineService service = new KernelMetadataQuarantineService(repository, 3, observationPort);
 
@@ -77,7 +78,7 @@ class KernelMetadataQuarantineServiceTests {
     @Test
     void shouldRejectRetryWhenMaxRetryCountReached() {
         InMemoryQuarantineRepository repository = new InMemoryQuarantineRepository();
-        repository.put(quarantine("q-1", false, 3, null));
+        repository.put(quarantineRecord("q-1", false, 3, null));
         KernelMetadataQuarantineService service = new KernelMetadataQuarantineService(repository, 3);
 
         assertThatThrownBy(() -> service.retry("q-1",
@@ -90,7 +91,7 @@ class KernelMetadataQuarantineServiceTests {
                 .isEqualTo(3);
     }
 
-    private static MetadataQuarantineRecord quarantine(String id,
+    private static MetadataQuarantineRecord quarantineRecord(String id,
                                                        boolean resolved,
                                                        int retryCount,
                                                        Instant nextRetryTime) {
@@ -113,12 +114,21 @@ class KernelMetadataQuarantineServiceTests {
                 Instant.EPOCH);
     }
 
-    private static final class InMemoryQuarantineRepository implements MetadataQuarantineManagementRepositoryPort {
+    private static final class InMemoryQuarantineRepository implements MetadataQuarantinePort {
 
         private final Map<String, MetadataQuarantineRecord> records = new LinkedHashMap<>();
 
         void put(MetadataQuarantineRecord record) {
             records.put(record.id(), record);
+        }
+
+        @Override
+        public void quarantine(MetadataQuarantineItem item) {
+            records.computeIfAbsent(item.taskId(), id -> quarantineRecord(
+                    "q-" + (records.size() + 1),
+                    false,
+                    0,
+                    null));
         }
 
         @Override
@@ -135,7 +145,7 @@ class KernelMetadataQuarantineServiceTests {
         @Override
         public MetadataQuarantineRecord resolveQuarantineItem(MetadataQuarantineResolution resolution) {
             MetadataQuarantineRecord current = findQuarantineItem(resolution.itemId()).orElseThrow();
-            MetadataQuarantineRecord updated = quarantine(current.id(), true, current.retryCount(),
+            MetadataQuarantineRecord updated = quarantineRecord(current.id(), true, current.retryCount(),
                     current.nextRetryTime());
             records.put(updated.id(), updated);
             return updated;
@@ -144,7 +154,7 @@ class KernelMetadataQuarantineServiceTests {
         @Override
         public MetadataQuarantineRecord scheduleQuarantineRetry(MetadataQuarantineRetry retry) {
             MetadataQuarantineRecord current = findQuarantineItem(retry.itemId()).orElseThrow();
-            MetadataQuarantineRecord updated = quarantine(current.id(), false, current.retryCount() + 1,
+            MetadataQuarantineRecord updated = quarantineRecord(current.id(), false, current.retryCount() + 1,
                     retry.nextRetryTime());
             records.put(updated.id(), updated);
             return updated;

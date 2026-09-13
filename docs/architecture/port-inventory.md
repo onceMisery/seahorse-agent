@@ -1,6 +1,6 @@
 # Public Port Inventory and Retirement Rules
 
-Updated: 2026-09-06 (billing aggregate consolidation)
+Updated: 2026-09-13 (metadata governance trio consolidation)
 Authority: `PortArchitectureTest` and compiled source under
 `com.miracle.ai.seahorse.agent.ports`
 
@@ -9,18 +9,48 @@ Authority: `PortArchitectureTest` and compiled source under
 | Direction | Public interfaces | Meaning |
 | --- | ---: | --- |
 | Inbound | 92 | Capability entry points called by delivery adapters or other capabilities |
-| Outbound | 261 | Independently replaceable external/runtime boundaries |
+| Outbound | 258 | Independently replaceable external/runtime boundaries |
 | Common | 1 | Shared boundary outside the directional packages |
-| Total | 354 | Reviewed ceiling; must only decrease |
+| Total | 351 | Reviewed ceiling; must only decrease |
 
 The inventory is measured by the public-interface ArchUnit scan, not by source
 file count. The duplicate `SreHealthReportProviderPort` boundary was retired
 in favor of `SreHealthInboundPort`; both previously exposed the same
 `SreHealthReport current()` operation and shared one implementation.
 
-The 785 Java files under `ports` are informational package-hygiene data, not
+The 782 Java files under `ports` are informational package-hygiene data, not
 the Port count. Records, enums, commands, responses, and other value objects do
 not become architectural Ports merely because they are stored in that package.
+
+2026-09-13 metadata governance trio consolidation (design §6.2 repository
+fragment rule), all three merges verified by same-aggregate evidence below:
+
+- `MetadataExtractionResultManagementRepositoryPort` was merged into
+  `MetadataExtractionResultRepositoryPort`. Extraction-result persistence in
+  the ingestion pipeline and the governance-side result trace query share the
+  same `metadata_extraction_result` table and transaction boundary; the
+  merged port holds five cohesive operations and the management-only
+  `empty()` default resolves to the existing `noop()` write-side fake. The
+  fragment port and its adapter class were deleted.
+- `MetadataQuarantineManagementRepositoryPort` was merged into
+  `MetadataQuarantinePort`. Quarantine writes from the ingestion pipeline and
+  the governance-side item read/resolve/retry-schedule land in the same
+  `metadata_quarantine_item` table and transaction boundary; the merged port
+  holds five operations and preserves the failing `empty()` semantics for
+  resolve/retry. The fragment port and its adapter class were deleted.
+- `MetadataReviewManagementRepositoryPort` was merged into
+  `MetadataReviewQueuePort`. Review enqueueing and the governance-side item
+  read, audit trace, and decision persistence share the same
+  `metadata_review_item` table and transaction boundary; the merged port
+  holds five operations. The fragment port and its adapter class were
+  deleted.
+
+In all three merges `KernelMetadataExtractionResultService`,
+`KernelMetadataQuarantineService`, and `KernelMetadataReviewService` are the
+single consuming services, and the JDBC governance adapter absorbed the
+fragment implementations (the delegate adapter classes in
+`JdbcMetadataPortAdapters` were deleted). Port interfaces fell from 354 to
+351 (outbound 261 to 258) and `port_java_files_info` from 785 to 782.
 
 2026-09-06 billing aggregate consolidation (design §6.2 repository fragment
 rule), both merges verified by same-aggregate evidence below:
@@ -233,10 +263,10 @@ that forbids the merge.
 | subscription | SubscriptionRepositoryPort, SubscriptionPlanRepositoryPort | KEEP split | user-state vs catalog aggregates |
 | agent definition | AgentDefinitionInboundPort (9, legacy budget) | KEEP | at reviewed operation budget; absorbing siblings would breach it |
 | sandbox runtime | SandboxRuntimeInboundPort (12, legacy budget) | KEEP | reviewed legacy budget |
-| metadata management trio | MetadataExtractionResultManagementRepositoryPort, MetadataQuarantineManagementRepositoryPort, MetadataReviewManagementRepositoryPort | IN REVIEW (user WIP) | the user's in-flight metadata refactor already dissolves these three (-3 ports, uncommitted); verdict deferred to that change's author |
+| metadata management trio | MetadataExtractionResultRepositoryPort (5, merged), MetadataQuarantinePort (5, merged), MetadataReviewQueuePort (5, merged) | DONE | write+governance views of one aggregate per port merged this cycle (§6.2) |
 
-Review outcome: 351 (with the metadata WIP applied) is the honest floor
-for this cycle without breaching §6.3/§6.5. Reaching 300 requires
+Review outcome: 351 is the honest floor for this cycle, reached with the
+metadata trio merge above, without breaching §6.3/§6.5. Reaching 300 requires
 capability-level API redesign (reducing operation counts of legacy-budget
 ports and collapsing small capabilities into their parents), which is a
 feature-cycle decision, not a consolidation-mechanical one.

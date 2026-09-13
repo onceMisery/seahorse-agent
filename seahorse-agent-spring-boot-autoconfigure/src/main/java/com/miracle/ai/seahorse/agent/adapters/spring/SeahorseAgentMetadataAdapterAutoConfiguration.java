@@ -37,12 +37,9 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJob
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexStatusPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
@@ -166,8 +163,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
             havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataExtractionResultRepositoryAdapter.class,
-            MetadataExtractionResultRepositoryPort.class,
-            MetadataExtractionResultManagementRepositoryPort.class
+            MetadataExtractionResultRepositoryPort.class
     })
     public JdbcMetadataExtractionResultRepositoryAdapter seahorseJdbcMetadataExtractionResultRepositoryAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
@@ -183,21 +179,12 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryDelegate.class)
-    @ConditionalOnMissingBean(MetadataExtractionResultManagementRepositoryPort.class)
-    public MetadataExtractionResultManagementRepositoryPort seahorseMetadataExtractionResultManagementRepositoryPort(
-            JdbcMetadataGovernanceRepositoryDelegate delegate) {
-        return JdbcMetadataPortAdapters.extractionResultManagement(delegate.adapter());
-    }
-
-    @Bean
     @ConditionalOnBean({DataSource.class, ObjectMapper.class})
     @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type",
             havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataReviewRepositoryAdapter.class,
-            MetadataReviewQueuePort.class,
-            MetadataReviewManagementRepositoryPort.class
+            MetadataReviewQueuePort.class
     })
     public JdbcMetadataReviewRepositoryAdapter seahorseJdbcMetadataReviewRepositoryAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
@@ -217,8 +204,7 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
             havingValue = "jdbc", matchIfMissing = true)
     @ConditionalOnMissingBean({
             JdbcMetadataQuarantineRepositoryAdapter.class,
-            MetadataQuarantinePort.class,
-            MetadataQuarantineManagementRepositoryPort.class
+            MetadataQuarantinePort.class
     })
     public JdbcMetadataQuarantineRepositoryAdapter seahorseJdbcMetadataQuarantineRepositoryAdapter(
             DataSource dataSource, ObjectMapper objectMapper) {
@@ -295,22 +281,6 @@ public class SeahorseAgentMetadataAdapterAutoConfiguration {
     public MetadataQualityReportRepositoryPort seahorseMetadataQualityReportRepositoryPort(
             JdbcMetadataGovernanceRepositoryDelegate delegate) {
         return JdbcMetadataPortAdapters.qualityReport(delegate.adapter());
-    }
-
-    @Bean
-    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryDelegate.class)
-    @ConditionalOnMissingBean(MetadataReviewManagementRepositoryPort.class)
-    public MetadataReviewManagementRepositoryPort seahorseMetadataReviewManagementRepositoryPort(
-            JdbcMetadataGovernanceRepositoryDelegate delegate) {
-        return JdbcMetadataPortAdapters.reviewManagement(delegate.adapter());
-    }
-
-    @Bean
-    @ConditionalOnBean(JdbcMetadataGovernanceRepositoryDelegate.class)
-    @ConditionalOnMissingBean(MetadataQuarantineManagementRepositoryPort.class)
-    public MetadataQuarantineManagementRepositoryPort seahorseMetadataQuarantineManagementRepositoryPort(
-            JdbcMetadataGovernanceRepositoryDelegate delegate) {
-        return JdbcMetadataPortAdapters.quarantineManagement(delegate.adapter());
     }
 
     @Bean

@@ -205,11 +205,11 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.ScoredMemoryVectorPor
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.WorkingMemoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataBackfillJobRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaUsageReportRepositoryPort;
@@ -1517,13 +1517,13 @@ class SeahorseAgentKernelAutoConfigurationTests {
         }
 
         @Bean
-        MetadataReviewManagementRepositoryPort metadataReviewManagementRepositoryPort() {
-            return mock(MetadataReviewManagementRepositoryPort.class);
+        MetadataReviewQueuePort metadataReviewManagementRepositoryPort() {
+            return mock(MetadataReviewQueuePort.class);
         }
 
         @Bean
-        MetadataQuarantineManagementRepositoryPort metadataQuarantineManagementRepositoryPort() {
-            return mock(MetadataQuarantineManagementRepositoryPort.class);
+        MetadataQuarantinePort metadataQuarantineManagementRepositoryPort() {
+            return mock(MetadataQuarantinePort.class);
         }
 
         @Bean
@@ -1542,8 +1542,8 @@ class SeahorseAgentKernelAutoConfigurationTests {
         }
 
         @Bean
-        MetadataExtractionResultManagementRepositoryPort metadataExtractionResultManagementRepositoryPort() {
-            return mock(MetadataExtractionResultManagementRepositoryPort.class);
+        MetadataExtractionResultRepositoryPort metadataExtractionResultManagementRepositoryPort() {
+            return mock(MetadataExtractionResultRepositoryPort.class);
         }
     }
 

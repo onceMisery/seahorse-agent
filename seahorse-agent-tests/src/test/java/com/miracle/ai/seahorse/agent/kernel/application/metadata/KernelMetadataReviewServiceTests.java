@@ -24,7 +24,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineI
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewAuditRecord;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewDecision;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewItem;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewRecord;
@@ -293,13 +294,33 @@ class KernelMetadataReviewServiceTests {
                 Instant.EPOCH);
     }
 
-    private static final class InMemoryReviewRepository implements MetadataReviewManagementRepositoryPort {
+    private static final class InMemoryReviewRepository implements MetadataReviewQueuePort {
 
         private final Map<String, MetadataReviewRecord> records = new LinkedHashMap<>();
         private final List<MetadataReviewAuditRecord> audits = new java.util.ArrayList<>();
 
         void put(MetadataReviewRecord record) {
             records.put(record.id(), record);
+        }
+
+        @Override
+        public void enqueue(MetadataReviewItem item) {
+            records.computeIfAbsent(item.resultId(), id -> new MetadataReviewRecord(
+                    id,
+                    item.tenantId(),
+                    1L,
+                    1L,
+                    item.resultId(),
+                    MetadataReviewStatus.PENDING,
+                    0,
+                    item.reasonCode(),
+                    item.reasonMessage(),
+                    item.reviewContext(),
+                    Map.of(),
+                    "",
+                    "",
+                    Instant.EPOCH,
+                    Instant.EPOCH));
         }
 
         void addAudit(MetadataReviewAuditRecord audit) {

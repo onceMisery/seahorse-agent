@@ -41,12 +41,11 @@ import com.miracle.ai.seahorse.agent.ports.inbound.retrieval.RetrievalEvaluation
 import com.miracle.ai.seahorse.agent.ports.outbound.knowledge.KnowledgeDocumentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataCanonicalWritePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataDictionaryManagementRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataIndexCompensationPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQualityReportRepositoryPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewQueuePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataReviewReExtractPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaIndexSyncPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataSchemaManagementRepositoryPort;
@@ -109,10 +108,10 @@ public class SeahorseAgentKernelMetadataAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(MetadataReviewManagementRepositoryPort.class)
+    @ConditionalOnBean(MetadataReviewQueuePort.class)
     @ConditionalOnMissingBean(MetadataReviewInboundPort.class)
     public KernelMetadataReviewService seahorseMetadataReviewInboundPort(
-            MetadataReviewManagementRepositoryPort reviewRepositoryPort,
+            MetadataReviewQueuePort reviewRepositoryPort,
             ObjectProvider<MetadataCanonicalWritePort> canonicalWritePort,
             ObjectProvider<MetadataQuarantinePort> quarantinePort,
             ObjectProvider<MetadataReviewReExtractPort> reExtractPort,
@@ -127,10 +126,10 @@ public class SeahorseAgentKernelMetadataAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(MetadataQuarantineManagementRepositoryPort.class)
+    @ConditionalOnBean(MetadataQuarantinePort.class)
     @ConditionalOnMissingBean(MetadataQuarantineInboundPort.class)
     public KernelMetadataQuarantineService seahorseMetadataQuarantineInboundPort(
-            MetadataQuarantineManagementRepositoryPort quarantineRepositoryPort,
+            MetadataQuarantinePort quarantineRepositoryPort,
             @Value("${seahorse.agent.metadata.governance.quarantine.max-retry-count:3}") int maxRetryCount,
             ObjectProvider<ObservationPort> observationPort) {
         return new KernelMetadataQuarantineService(quarantineRepositoryPort, maxRetryCount,
@@ -160,9 +159,9 @@ public class SeahorseAgentKernelMetadataAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(MetadataExtractionResultInboundPort.class)
     public KernelMetadataExtractionResultService seahorseMetadataExtractionResultInboundPort(
-            ObjectProvider<MetadataExtractionResultManagementRepositoryPort> repositoryPort) {
+            ObjectProvider<MetadataExtractionResultRepositoryPort> repositoryPort) {
         return new KernelMetadataExtractionResultService(
-                repositoryPort.getIfAvailable(MetadataExtractionResultManagementRepositoryPort::empty));
+                repositoryPort.getIfAvailable(MetadataExtractionResultRepositoryPort::empty));
     }
 
     @Bean

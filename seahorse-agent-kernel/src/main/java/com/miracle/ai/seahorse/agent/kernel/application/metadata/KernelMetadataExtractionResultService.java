@@ -1,7 +1,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.metadata;
 
 import com.miracle.ai.seahorse.agent.ports.inbound.metadata.MetadataExtractionResultInboundPort;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultManagementRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultQuery;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataExtractionResultRecord;
@@ -15,11 +15,11 @@ import java.util.Objects;
  */
 public class KernelMetadataExtractionResultService implements MetadataExtractionResultInboundPort {
 
-    private final MetadataExtractionResultManagementRepositoryPort repositoryPort;
+    private final MetadataExtractionResultRepositoryPort repositoryPort;
 
-    public KernelMetadataExtractionResultService(MetadataExtractionResultManagementRepositoryPort repositoryPort) {
+    public KernelMetadataExtractionResultService(MetadataExtractionResultRepositoryPort repositoryPort) {
         this.repositoryPort = Objects.requireNonNullElse(repositoryPort,
-                MetadataExtractionResultManagementRepositoryPort.empty());
+                MetadataExtractionResultRepositoryPort.empty());
     }
 
     @Override

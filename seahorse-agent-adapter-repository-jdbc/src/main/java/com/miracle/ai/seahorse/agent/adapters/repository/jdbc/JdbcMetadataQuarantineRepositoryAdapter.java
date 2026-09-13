@@ -19,7 +19,6 @@ package com.miracle.ai.seahorse.agent.adapters.repository.jdbc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineItem;
-import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineManagementRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePage;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantinePort;
 import com.miracle.ai.seahorse.agent.ports.outbound.metadata.MetadataQuarantineQuery;
@@ -32,8 +31,7 @@ import javax.sql.DataSource;
 import java.util.Objects;
 import java.util.Optional;
 
-public class JdbcMetadataQuarantineRepositoryAdapter implements MetadataQuarantinePort,
-        MetadataQuarantineManagementRepositoryPort {
+public class JdbcMetadataQuarantineRepositoryAdapter implements MetadataQuarantinePort {
 
     private final JdbcMetadataQuarantineSupport quarantineSupport;
 
