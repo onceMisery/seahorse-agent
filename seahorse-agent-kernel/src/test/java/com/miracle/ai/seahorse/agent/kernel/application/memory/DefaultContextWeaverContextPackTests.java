@@ -79,7 +79,7 @@ class DefaultContextWeaverContextPackTests {
     }
 
     @Test
-    void shouldPreferContextPackOverLegacyMemoryWhenBothExist() {
+    void shouldMergeContextPackWithLegacyMemoryWhenBothExist() {
         DefaultContextWeaver weaver = new DefaultContextWeaver();
         MemoryContext memoryContext = MemoryContext.builder()
                 .profileMemories(List.of(MemoryItem.builder().content("legacy memory").build()))
@@ -91,8 +91,41 @@ class DefaultContextWeaverContextPackTests {
                 memoryContext,
                 ContextBudget.defaults());
 
+        // the pack section and the strong-fact memory section must both survive:
+        // a non-blank ContextPack no longer discards the user's profile/correction facts
+        assertTrue(prompt.contains("ContextPack"));
         assertTrue(prompt.contains("context pack content"));
-        assertFalse(prompt.contains("legacy memory"));
+        assertTrue(prompt.contains("用户记忆上下文"));
+        assertTrue(prompt.contains("legacy memory"));
+        assertTrue(prompt.indexOf("context pack content") < prompt.indexOf("legacy memory"));
+    }
+
+    @Test
+    void shouldKeepMemoryOnlyOutputWhenPackHasNoUsableItems() {
+        DefaultContextWeaver weaver = new DefaultContextWeaver();
+        MemoryContext memoryContext = MemoryContext.builder()
+                .profileMemories(List.of(MemoryItem.builder().content("profile fact").build()))
+                .build();
+
+        String prompt = weaver.weave(contextPack(List.of(
+                item("secret-1", ContextItemSourceType.MEMORY, "plain text secret",
+                        ContextSensitivity.SECRET, "decision-1", "{\"memoryId\":\"mem-secret\"}"))),
+                memoryContext,
+                ContextBudget.defaults());
+
+        assertFalse(prompt.contains("ContextPack"));
+        assertTrue(prompt.contains("用户记忆上下文"));
+        assertTrue(prompt.contains("profile fact"));
+    }
+
+    @Test
+    void shouldReturnBlankWhenPackAndMemoryAreBothAbsent() {
+        DefaultContextWeaver weaver = new DefaultContextWeaver();
+
+        String prompt = weaver.weave(contextPack(List.of()), MemoryContext.builder().build(),
+                ContextBudget.defaults());
+
+        assertEquals("", prompt);
     }
 
     @Test

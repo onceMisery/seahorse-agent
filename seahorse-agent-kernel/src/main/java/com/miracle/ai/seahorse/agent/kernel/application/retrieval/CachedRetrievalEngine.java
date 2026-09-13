@@ -29,6 +29,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 
 /**
@@ -39,6 +41,10 @@ import java.util.function.BiFunction;
  * tenant scope, query text and retrieval options, so entries are isolated per tenant
  * and identical queries from different tenants never collide.
  *
+ * <p>The cache is bounded: at most {@code maxEntries} (default 4096) results are
+ * retained, evicting the least recently inserted key FIFO when the capacity is
+ * exceeded, so unbounded long-tail query streams cannot leak memory.
+ *
  * <p>This is a decorator: supply the actual retrieval logic as a {@link BiFunction}
  * and wrap it with this engine to gain transparent caching.
  */
@@ -46,13 +52,17 @@ public class CachedRetrievalEngine<T> {
 
     private static final Logger log = LoggerFactory.getLogger(CachedRetrievalEngine.class);
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(10);
+    private static final int DEFAULT_MAX_ENTRIES = 4096;
 
     /** Well-known options key carrying the tenant scope used to isolate cache entries. */
     private static final String OPTION_TENANT_ID = "tenantId";
 
     private final BiFunction<String, Map<String, Object>, List<T>> delegate;
     private final ConcurrentHashMap<String, CacheEntry<List<T>>> cache;
+    private final ConcurrentLinkedDeque<String> keyOrder = new ConcurrentLinkedDeque<>();
+    private final ReentrantLock writeLock = new ReentrantLock();
     private final Duration ttl;
+    private final int maxEntries;
 
     /**
      * Create a cached retrieval engine wrapping the given delegate with default TTL (10 minutes).
@@ -71,8 +81,26 @@ public class CachedRetrievalEngine<T> {
      */
     public CachedRetrievalEngine(BiFunction<String, Map<String, Object>, List<T>> delegate,
                                  Duration ttl) {
+        this(delegate, ttl, DEFAULT_MAX_ENTRIES);
+    }
+
+    /**
+     * Create a cached retrieval engine wrapping the given delegate with a custom TTL
+     * and a bounded number of cache entries.
+     *
+     * @param delegate   the underlying retrieval function (query, options) → results
+     * @param ttl        the cache entry time-to-live
+     * @param maxEntries the maximum number of retained results; must be positive
+     */
+    public CachedRetrievalEngine(BiFunction<String, Map<String, Object>, List<T>> delegate,
+                                 Duration ttl,
+                                 int maxEntries) {
         this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
         this.ttl = Objects.requireNonNullElse(ttl, DEFAULT_TTL);
+        if (maxEntries <= 0) {
+            throw new IllegalArgumentException("maxEntries must be positive: " + maxEntries);
+        }
+        this.maxEntries = maxEntries;
         this.cache = new ConcurrentHashMap<>();
     }
 
@@ -94,7 +122,7 @@ public class CachedRetrievalEngine<T> {
 
         log.debug("Cache miss for query hash [{}], delegating", cacheKey.substring(0, 8));
         List<T> results = delegate.apply(query, options != null ? options : Map.of());
-        cache.put(cacheKey, new CacheEntry<>(results, Instant.now().plus(ttl)));
+        put(cacheKey, new CacheEntry<>(results, Instant.now().plus(ttl)));
         evictStaleEntries();
         return results;
     }
@@ -103,7 +131,13 @@ public class CachedRetrievalEngine<T> {
      * Invalidate all cached entries.
      */
     public void invalidateAll() {
-        cache.clear();
+        writeLock.lock();
+        try {
+            cache.clear();
+            keyOrder.clear();
+        } finally {
+            writeLock.unlock();
+        }
     }
 
     /**
@@ -111,6 +145,27 @@ public class CachedRetrievalEngine<T> {
      */
     public int cacheSize() {
         return cache.size();
+    }
+
+    private void put(String cacheKey, CacheEntry<List<T>> entry) {
+        writeLock.lock();
+        try {
+            cache.put(cacheKey, entry);
+            keyOrder.removeFirstOccurrence(cacheKey);
+            keyOrder.addLast(cacheKey);
+            while (cache.size() > maxEntries) {
+                String eldest = keyOrder.pollFirst();
+                if (eldest == null) {
+                    break;
+                }
+                CacheEntry<List<T>> evicted = cache.remove(eldest);
+                if (evicted != null && log.isDebugEnabled()) {
+                    log.debug("Evicted cache entry [{}] after reaching maxEntries {}", eldest, maxEntries);
+                }
+            }
+        } finally {
+            writeLock.unlock();
+        }
     }
 
     private static String computeCacheKey(String query, Map<String, Object> options) {

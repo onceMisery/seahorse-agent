@@ -111,11 +111,51 @@ public class DefaultContextWeaver implements ContextWeaverPort {
 
     @Override
     public String weave(ContextPack contextPack, MemoryContext memoryContext, ContextBudget budget) {
-        String contextPackText = weave(contextPack, budget);
-        if (!contextPackText.isBlank()) {
-            return contextPackText;
+        boolean memoryPresent = hasMemory(memoryContext);
+        boolean packPresent = hasContextPackItems(contextPack);
+        if (!packPresent && !memoryPresent) {
+            return "";
         }
-        return weave(memoryContext, budget);
+        ContextBudget safeBudget = Objects.requireNonNullElseGet(budget, ContextBudget::defaults);
+        BudgetedBuilder builder = new BudgetedBuilder(safeBudget.maxItems(), safeBudget.maxChars());
+        int packItemCount = 0;
+        if (packPresent) {
+            builder.appendHeader(CONTEXT_PACK_TITLE);
+            for (ContextItem item : contextPack.items()) {
+                appendContextItem(builder, item);
+            }
+            packItemCount = builder.itemCount;
+            if (packItemCount == 0) {
+                // the pack contributed nothing usable (all items secret/blank/budget-evicted);
+                // restart so the memory section does not inherit a dangling pack header
+                builder = new BudgetedBuilder(safeBudget.maxItems(), safeBudget.maxChars());
+            } else {
+                builder.appendFooter(CONTEXT_PACK_NOTE);
+            }
+        }
+        int memoryItemCount = 0;
+        if (memoryPresent) {
+            builder.appendHeader(MEMORY_CONTEXT_TITLE);
+            appendZone(builder, "[Correction Ledger]", memoryContext.getCorrectionMemories());
+            appendZone(builder, "[Profile KV]", memoryContext.getProfileMemories());
+            appendZone(builder, "[Short Window]", memoryContext.getShortTermMemories());
+            appendZone(builder, "[Business Documents]", memoryContext.getBusinessDocumentMemories());
+            appendZone(builder, "[Semantic Memory]", memoryContext.getSemanticMemories());
+            appendZone(builder, "[Long-Term Episodic]", memoryContext.getLongTermMemories());
+            memoryItemCount = builder.itemCount - packItemCount;
+            builder.appendFooter(MEMORY_CONFLICT_NOTE);
+        }
+        if (builder.itemCount == 0 && !memoryPresent) {
+            return "";
+        }
+        String prompt = builder.build();
+        if (packItemCount > 0) {
+            recordContextPackTrace(contextPack, safeBudget, builder, prompt);
+        }
+        if (memoryPresent) {
+            recordTrace(memoryContext, safeBudget, builder, prompt);
+        }
+        return prompt;
     }
 
     private static boolean hasMemory(MemoryContext context) {

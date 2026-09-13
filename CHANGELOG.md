@@ -33,6 +33,13 @@
 - 默认模型上下文窗口预算（32_768）与安全档位开关决策下沉到 `ModelContextWindowPort`。
 
 #### Fixed
+- 核心能力加固批次（P0/P1，落地 `docs/优化实施计划.md` 剩余项）：
+  `CachedRetrievalEngine` 在租户隔离键（此前已修）之上补齐容量上限
+  （默认 4096，FIFO 淘汰 + 失效清理，消除长尾无界内存泄漏）；
+  `DefaultContextWeaver` 三参重载改为合并注入——ContextPack 与用户记忆
+  （Correction Ledger / Profile KV 等强事实）共享同一预算同时进入 prompt，
+  不再因命中 ContextPack 而整体丢弃记忆；`DefaultMemoryRouter` 将
+  PROFILE 轨道加入默认集合，画像不再依赖问句关键词臆想才召回。
 - 配额检查故障静默放行（fail-open）改为 fail-closed（设计 §9 必需依赖语义）。
 - `AiModelConfigController` 六个端点吞掉认证异常导致登录过期返回 200 错误信封的问题。
 - 前端 SSE 终态幂等：同一序列号去重、首个终态事件后忽略迟到事件。

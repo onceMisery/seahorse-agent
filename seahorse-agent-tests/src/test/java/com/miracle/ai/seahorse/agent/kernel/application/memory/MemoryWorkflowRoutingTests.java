@@ -87,7 +87,7 @@ class MemoryWorkflowRoutingTests {
     }
 
     @Test
-    void shouldRouteGeneralChatToShortWindowWithoutProfileOrEpisodicTracks() {
+    void shouldRouteGeneralChatToShortWindowAndProfileWithoutOptionalTracks() {
         MemoryRouterPort router = new DefaultMemoryRouter();
 
         MemoryRoutePlan plan = router.route(new MemoryRouteRequest(
@@ -97,7 +97,9 @@ class MemoryWorkflowRoutingTests {
 
         Assertions.assertTrue(plan.isActive(MemoryTrack.CORRECTION));
         Assertions.assertTrue(plan.isActive(MemoryTrack.SHORT_WINDOW));
-        Assertions.assertFalse(plan.isActive(MemoryTrack.PROFILE));
+        // Profile KV is a strong-fact source: it loads on every turn, without
+        // requiring profile-flavored keywords in the question.
+        Assertions.assertTrue(plan.isActive(MemoryTrack.PROFILE));
         Assertions.assertFalse(plan.isActive(MemoryTrack.EPISODIC));
         Assertions.assertFalse(plan.isActive(MemoryTrack.BUSINESS_DOCUMENT));
     }
