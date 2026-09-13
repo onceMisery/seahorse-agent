@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -34,7 +36,7 @@ public record MemoryBufferSnapshot(
         Instant to
 ) {
 
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
 
     public MemoryBufferSnapshot {
         snapshotId = normalize(snapshotId, "");

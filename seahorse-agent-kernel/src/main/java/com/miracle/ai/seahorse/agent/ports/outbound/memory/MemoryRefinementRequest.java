@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -40,7 +42,7 @@ public record MemoryRefinementRequest(
         List<MemoryReviewFeedbackSample> feedbackExamples
 ) {
 
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
 
     public MemoryRefinementRequest {
         operationId = normalize(operationId, "");

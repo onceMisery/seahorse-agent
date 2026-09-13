@@ -19,12 +19,14 @@ package com.miracle.ai.seahorse.agent.ports.outbound.config;
 
 import com.miracle.ai.seahorse.agent.kernel.model.AiModelConfig;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.util.List;
 import java.util.Optional;
 
 public interface AiModelConfigRepositoryPort {
 
-    String DEFAULT_TENANT_ID = "default";
+    String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
 
     List<AiModelConfig> findAll();
 

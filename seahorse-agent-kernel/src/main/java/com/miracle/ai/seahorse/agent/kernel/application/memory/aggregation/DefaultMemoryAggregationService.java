@@ -39,6 +39,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.observation.ObservationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -54,7 +56,7 @@ public class DefaultMemoryAggregationService implements MemoryAggregationService
 
     private static final Logger LOG = LoggerFactory.getLogger(DefaultMemoryAggregationService.class);
 
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
     private static final String FLUSH_SOURCE = "memory-aggregation-flush";
     private static final String TRACE_COMPONENT = "memory-aggregation";
     private static final String TRACE_EVENT_APPEND_TURN = "append-turn";

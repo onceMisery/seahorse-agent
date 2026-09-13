@@ -22,13 +22,15 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAggregationServ
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFlushTrigger;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryIngestionResult;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
 
 public class KernelMemoryAggregationControlService implements MemoryAggregationInboundPort {
 
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
 
     private final MemoryAggregationServicePort aggregationServicePort;
     private final Clock clock;

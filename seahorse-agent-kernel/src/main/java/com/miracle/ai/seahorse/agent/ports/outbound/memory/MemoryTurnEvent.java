@@ -17,6 +17,8 @@
 
 package com.miracle.ai.seahorse.agent.ports.outbound.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.time.Instant;
 import java.util.Objects;
 
@@ -33,7 +35,7 @@ public record MemoryTurnEvent(
         int estimatedTokens
 ) {
 
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
 
     public MemoryTurnEvent {
         tenantId = normalize(tenantId, DEFAULT_TENANT_ID);

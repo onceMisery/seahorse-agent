@@ -23,6 +23,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPo
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -45,7 +47,7 @@ public class SkillSmartMatcher {
 
     private static final Logger LOG = LoggerFactory.getLogger(SkillSmartMatcher.class);
 
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
     private static final int DEFAULT_MAX_RECOMMENDATIONS = 3;
     private static final int AVAILABLE_SKILLS_PAGE_SIZE = 100;
     private static final int MAX_AVAILABLE_SKILLS_SCAN = 10_000;

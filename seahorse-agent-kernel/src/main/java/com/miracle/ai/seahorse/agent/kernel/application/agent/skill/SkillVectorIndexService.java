@@ -28,6 +28,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.embedding.EmbeddingPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -52,7 +54,7 @@ public class SkillVectorIndexService implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(SkillVectorIndexService.class);
 
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
     private static final int BATCH_SIZE = 50;
 
     private final EmbeddingPort embeddingPort;

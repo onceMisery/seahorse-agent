@@ -19,6 +19,8 @@ package com.miracle.ai.seahorse.agent.kernel.application.memory.maintenance;
 
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryAliasCandidate;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.util.Map;
 import java.util.Objects;
 
@@ -31,7 +33,7 @@ public record MemoryAliasResolutionOptions(
 ) {
 
     private static final int DEFAULT_SCAN_LIMIT = 100;
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
     private static final double DEFAULT_AUTO_RESOLVE_CONFIDENCE_THRESHOLD = 0.95D;
 
     public MemoryAliasResolutionOptions {

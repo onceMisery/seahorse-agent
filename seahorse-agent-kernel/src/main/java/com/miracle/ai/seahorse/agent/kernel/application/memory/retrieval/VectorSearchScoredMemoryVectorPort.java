@@ -28,6 +28,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.vector.VectorSearchRequest;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -50,7 +52,7 @@ public class VectorSearchScoredMemoryVectorPort implements ScoredMemoryVectorPor
     private static final String METADATA_EMBEDDING_MODEL_SNAKE = "embedding_model";
     private static final String METADATA_CHUNK_ID = "chunkId";
     private static final String METADATA_COLLECTION_NAME = "collectionName";
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
 
     private final VectorSearchPort vectorSearchPort;
     private final EmbeddingModelPort embeddingModelPort;

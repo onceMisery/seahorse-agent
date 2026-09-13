@@ -25,13 +25,15 @@ import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxEgressPolicyRep
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxPolicyRequest;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
 public class RepositoryBackedSandboxPolicyPort implements SandboxPolicyPort {
 
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
 
     private final SandboxNetworkPolicy defaultNetworkPolicy;
     private final List<String> defaultAllowlistedHosts;

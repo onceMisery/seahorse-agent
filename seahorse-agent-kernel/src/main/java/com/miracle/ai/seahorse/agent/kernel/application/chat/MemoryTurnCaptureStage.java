@@ -26,6 +26,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTurnEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,7 +36,7 @@ final class MemoryTurnCaptureStage {
 
     private static final Logger LOG = LoggerFactory.getLogger(MemoryTurnCaptureStage.class);
 
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
     private static final String ASSISTANT_MESSAGE_SUFFIX = "-assistant";
     private static final int CHARS_PER_TOKEN_ESTIMATE = 4;
 

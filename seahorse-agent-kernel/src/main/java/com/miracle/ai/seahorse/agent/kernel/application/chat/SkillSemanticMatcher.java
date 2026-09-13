@@ -26,6 +26,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.embedding.EmbeddingPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -47,7 +49,7 @@ public class SkillSemanticMatcher {
 
     private static final Logger LOG = LoggerFactory.getLogger(SkillSemanticMatcher.class);
 
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
     private static final int DEFAULT_MAX_RECOMMENDATIONS = 3;
     private static final float MIN_SIMILARITY_THRESHOLD = 0.6f;
     private static final float MIN_HYBRID_SCORE_THRESHOLD = 0.1f;

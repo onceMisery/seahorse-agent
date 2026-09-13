@@ -24,6 +24,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryBufferState;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryFlushTrigger;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTurnEvent;
 
+import com.miracle.ai.seahorse.agent.kernel.tenant.TenantConstants;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,7 +37,7 @@ import java.util.Optional;
 
 public class InMemoryMemoryAggregationBufferPort implements MemoryAggregationBufferPort {
 
-    private static final String DEFAULT_TENANT_ID = "default";
+    private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
 
     private final MemoryAggregationPolicy policy;
     private final Map<String, MutableBuffer> buffers = new LinkedHashMap<>();
