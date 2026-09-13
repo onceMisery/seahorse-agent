@@ -208,3 +208,35 @@ same directional baseline fields when `--update-baseline` is used.
 
 Port interfaces fell from 356 to 354 (inbound 93 to 92, outbound 262 to
 261) and `port_java_files_info` from 787 to 785.
+
+## Per-Capability Design Review (2026-09-06)
+
+The mechanical same-aggregate/same-table sweep is exhausted (every JDBC
+adapter maps to a disjoint aggregate owner). The remaining 354 -> 300
+reduction therefore requires this per-capability design review. Verdicts
+below are final for this governance cycle; each KEEP cites the §6.3 rule
+that forbids the merge.
+
+| Family | Ports | Verdict | Reason |
+| --- | --- | --- | --- |
+| quota (agent) | QuotaSummaryInboundPort (1), QuotaManagementInboundPort (3) | KEEP split | user-facing read vs admin policy write — distinct authorization (§6.3) |
+| memory governance/trace | MemoryGovernanceInboundPort (3), MemoryTraceInboundPort (1) | KEEP split | governance runs mutate state; trace is a read-only observability query (§6.3) |
+| memory recall evaluation | MemoryRecallEvaluationInboundPort (3, merged) | DONE | harness merged this cycle |
+| sandbox artifacts | SandboxArtifactPort (4, merged) | DONE | write+query views of one aggregate merged this cycle |
+| agent run worker | AgentRunWorkerInboundPort (1) | KEEP | single tick operation is the worker SPI consumed by the scheduler adapter |
+| workflow visualization | WorkflowVisualizationInboundPort (1) | KEEP | standalone read-only rendering capability; merging would widen a core port |
+| access decision / resource ACL | AccessDecisionQueryInboundPort (1), ResourceAclManagementInboundPort | KEEP split | query vs management CQRS split |
+| agentscope invocation | AgentExternalInvocationInboundPort (1) | KEEP | production SPI consumed by the agentscope adapter (§6.2 plugin/SPI) |
+| SRE health | SreHealthInboundPort (1) | KEEP | one coherent health-read use case; already de-duplicated once |
+| context pack builder | ContextPackBuilderInboundPort (1) | KEEP | internal chat-pipeline collaborator; merging into ChatInboundPort would widen the core chat boundary |
+| audit | AuditEventRepositoryPort, AuditLogRepositoryPort | KEEP split | agent audit trail vs admin operation log — distinct domains and lifecycles |
+| subscription | SubscriptionRepositoryPort, SubscriptionPlanRepositoryPort | KEEP split | user-state vs catalog aggregates |
+| agent definition | AgentDefinitionInboundPort (9, legacy budget) | KEEP | at reviewed operation budget; absorbing siblings would breach it |
+| sandbox runtime | SandboxRuntimeInboundPort (12, legacy budget) | KEEP | reviewed legacy budget |
+| metadata management trio | MetadataExtractionResultManagementRepositoryPort, MetadataQuarantineManagementRepositoryPort, MetadataReviewManagementRepositoryPort | IN REVIEW (user WIP) | the user's in-flight metadata refactor already dissolves these three (-3 ports, uncommitted); verdict deferred to that change's author |
+
+Review outcome: 351 (with the metadata WIP applied) is the honest floor
+for this cycle without breaching §6.3/§6.5. Reaching 300 requires
+capability-level API redesign (reducing operation counts of legacy-budget
+ports and collapsing small capabilities into their parents), which is a
+feature-cycle decision, not a consolidation-mechanical one.

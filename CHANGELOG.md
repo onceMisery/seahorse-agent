@@ -25,7 +25,10 @@
   （1050 → 599 行）。
 - `HybridMemoryRecallPipeline` 的 6 个望远镜构造器（最多 18 参）收敛为唯一 Builder 路径。
 - `ToolArgumentAuditSummary`（687 行）按业务阶段拆出 `SandboxToolArgumentSummaries`。
-- 前端路由级代码分割 + vendor manualChunks：主包 3,725 kB → 2,712 kB（-27%）。
+- 前端路由级代码分割 + vendor manualChunks：主包 3,725 kB → 2,712 kB（-27%）；
+  修复被遗留 vite.config.js 遮蔽的构建配置后按库族函数式拆分，首包 index
+  最终 78 kB（gzip 20.7 kB），构建不再出现 >500kB 警告；mermaid 改为运行时
+  动态加载（懒 chunk，不占关键路径）。
 - 前端错误处理统一到契约感知的 `mapApiError`/`isAuthExpiredError`，废弃中文子串匹配。
 - 默认模型上下文窗口预算（32_768）与安全档位开关决策下沉到 `ModelContextWindowPort`。
 
@@ -34,8 +37,14 @@
 - `AiModelConfigController` 六个端点吞掉认证异常导致登录过期返回 200 错误信封的问题。
 - 前端 SSE 终态幂等：同一序列号去重、首个终态事件后忽略迟到事件。
 - 取消语义闭环：客户端预生成 taskId、引擎侧取消落 `CANCELLED` 终态、迟到回调幂等。
-- 同聚合仓储 Port 碎片合并：`AgentRunQueue`→`AgentRunLease`、
-  `MemoryReviewCandidate`→`MemoryReviewManagementRepositoryPort`（Port 360 → 358）。
+- 同聚合仓储 Port 碎片合并（三波）：`AgentRunQueue`→`AgentRunLease`、
+  `MemoryReviewCandidate`→`MemoryReviewManagementRepositoryPort`、
+  `BillLineItem`→`Bill`、`PaymentCallbackLog`→`PaymentOrder`、
+  `MemoryRecallGoldenHarness`→`MemoryRecallEvaluation`、
+  `SandboxArtifactQuery`→`SandboxArtifactPort`（Port 360 → 354；含用户
+  metadata WIP 后为 351）。
+- 跨子域边溶解：SkillRuntimeComposer/SkillSetJsonSupport/RunContextSnapshotRedactor
+  移入 domain，chat 相关跨域白名单 47 → 40（回到 Phase 0 水位）。
 - 复杂度报告 `--update-baseline` 不再丢失手工维护的基线字段。
 
 #### Security
