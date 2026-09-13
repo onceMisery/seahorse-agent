@@ -82,14 +82,14 @@ jobs:
 
       - name: Upload surefire reports (on failure)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: surefire-reports
           path: '**/target/surefire-reports/**'
           retention-days: 7
 
       - name: Upload bootstrap jar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: seahorse-agent-bootstrap-jar
           path: seahorse-agent-bootstrap/target/seahorse-agent-bootstrap-*-exec.jar
