@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.SandboxArtifactPort;
 
 @EnabledIfEnvironmentVariable(named = "SEAHORSE_SANDBOX_CONTAINER_E2E", matches = "true")
 class SandboxPythonToolContainerDockerSmokeTest {
@@ -59,7 +60,7 @@ class SandboxPythonToolContainerDockerSmokeTest {
         KernelSandboxRuntimeService sandboxRuntime = KernelSandboxRuntimeService.builder()
                 .policyPort(new DefaultSandboxPolicyPort(SandboxNetworkPolicy.DENY_ALL, List.of()))
                 .runtimePort(runtimeAdapter)
-                .artifactPort(artifact -> artifact)
+                .artifactPort(SandboxArtifactPort.emptyQueries())
                 .clock(Clock.systemUTC())
                 .build();
         SandboxPythonToolPortAdapter tool = new SandboxPythonToolPortAdapter(
