@@ -15,13 +15,28 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
+package com.miracle.ai.seahorse.agent.ports.outbound.agent;
 
-public enum AgentRunTriggerType {
-    CHAT,
-    API,
-    SCHEDULE,
-    EVENT,
-    A2A,
-    TEAM
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamRun;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Agent 团队仓储端口：团队定义与团队运行的持久化边界。
+ */
+public interface AgentTeamRepositoryPort {
+
+    AgentTeamDefinition saveDefinition(AgentTeamDefinition definition);
+
+    Optional<AgentTeamDefinition> findDefinitionById(String teamId);
+
+    List<AgentTeamDefinition> listDefinitions(String tenantId);
+
+    AgentTeamRun saveTeamRun(AgentTeamRun teamRun);
+
+    Optional<AgentTeamRun> findTeamRunById(String teamRunId);
+
+    AgentTeamRun updateTeamRun(AgentTeamRun teamRun);
 }

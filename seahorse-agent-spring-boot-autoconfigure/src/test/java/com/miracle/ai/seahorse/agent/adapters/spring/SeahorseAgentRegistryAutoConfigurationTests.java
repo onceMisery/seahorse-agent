@@ -57,6 +57,14 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentDefinitionInboundP
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentEvalInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentFactoryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentHandoffInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentTeamInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.chat.StreamChatCommand;
+import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentTeamRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationMessageRecord;
+import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRecord;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunLeaseInboundPort;
@@ -137,6 +145,30 @@ class SeahorseAgentRegistryAutoConfigurationTests {
             .withConfiguration(AutoConfigurations.of(
                     SeahorseAgentRegistryRepositoryAutoConfiguration.class,
                     SeahorseAgentKernelRegistryAutoConfiguration.class));
+
+    @Test
+    void shouldCreateAgentTeamInboundPortWhenChatPortsExist() {
+        contextRunner.withUserConfiguration(TestInfrastructureConfiguration.class, TeamChatPortsConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(AgentTeamRepositoryPort.class);
+                    assertThat(context.getBean(AgentTeamRepositoryPort.class))
+                            .isInstanceOf(com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcAgentTeamRepositoryAdapter.class);
+                    assertThat(context).hasSingleBean(AgentTeamInboundPort.class);
+                    assertThat(context.getBean(AgentTeamInboundPort.class))
+                            .isInstanceOf(com.miracle.ai.seahorse.agent.kernel.application.agent.team.KernelAgentTeamService.class);
+                });
+    }
+
+    @Test
+    void shouldNotCreateAgentTeamInboundPortWithoutChatPorts() {
+        contextRunner.withUserConfiguration(TestInfrastructureConfiguration.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(AgentTeamRepositoryPort.class);
+                    assertThat(context).doesNotHaveBean(AgentTeamInboundPort.class);
+                });
+    }
 
     @Test
     void shouldCreatePhaseOneRegistryAndRunStoreBeans() {
@@ -400,6 +432,55 @@ class SeahorseAgentRegistryAutoConfigurationTests {
         @Bean
         ToolInvocationAuditPort customToolInvocationAuditPort() {
             return ToolInvocationAuditPort.noop();
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class TeamChatPortsConfiguration {
+
+        @Bean
+        ChatInboundPort chatInboundPort() {
+            return new ChatInboundPort() {
+                @Override
+                public void streamChat(StreamChatCommand command, StreamCallback callback) {
+                    // 装配断言不执行 chat
+                }
+
+                @Override
+                public void stopTask(String taskId) {
+                    // 装配断言不执行停止
+                }
+            };
+        }
+
+        @Bean
+        ConversationManagementInboundPort conversationManagementInboundPort() {
+            return new ConversationManagementInboundPort() {
+                @Override
+                public String create(String userId) {
+                    return "conv-team-wiring";
+                }
+
+                @Override
+                public List<ConversationRecord> listConversations(String userId) {
+                    return List.of();
+                }
+
+                @Override
+                public void rename(String conversationId, String userId, String title) {
+                    // 装配断言不执行改名
+                }
+
+                @Override
+                public void delete(String conversationId, String userId) {
+                    // 装配断言不执行删除
+                }
+
+                @Override
+                public List<ConversationMessageRecord> listMessages(String conversationId, String userId) {
+                    return List.of();
+                }
+            };
         }
     }
 }

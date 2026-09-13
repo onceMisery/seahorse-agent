@@ -99,6 +99,12 @@ import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeInboundPo
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SandboxRuntimeNodeRegistryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.SreHealthInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRolloutInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentRunInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.agent.AgentTeamInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.chat.ChatInboundPort;
+import com.miracle.ai.seahorse.agent.ports.inbound.conversation.ConversationManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentTeamRepositoryPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.team.KernelAgentTeamService;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.TaskTemplateQueryInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolCatalogManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.agent.ToolInvocationAuditQueryInboundPort;
@@ -559,6 +565,27 @@ public class SeahorseAgentKernelRegistryAutoConfiguration {
                 agentRunInboundPort,
                 meshPolicyPort,
                 auditLedgerService.getIfAvailable(),
+                clockProvider.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnBean({AgentTeamRepositoryPort.class, AgentHandoffInboundPort.class,
+            AgentRunInboundPort.class, ChatInboundPort.class,
+            ConversationManagementInboundPort.class})
+    @ConditionalOnMissingBean(AgentTeamInboundPort.class)
+    public KernelAgentTeamService seahorseAgentTeamInboundPort(
+            AgentTeamRepositoryPort agentTeamRepositoryPort,
+            KernelAgentHandoffService handoffService,
+            AgentRunInboundPort agentRunInboundPort,
+            ChatInboundPort chatInboundPort,
+            ConversationManagementInboundPort conversationManagementInboundPort,
+            ObjectProvider<Clock> clockProvider) {
+        return new KernelAgentTeamService(
+                agentTeamRepositoryPort,
+                handoffService,
+                agentRunInboundPort,
+                chatInboundPort,
+                conversationManagementInboundPort,
                 clockProvider.getIfAvailable(Clock::systemUTC));
     }
 

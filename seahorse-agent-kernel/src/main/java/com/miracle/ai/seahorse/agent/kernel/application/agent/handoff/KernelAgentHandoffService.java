@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditActorType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEvent;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.audit.AuditEventType;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoff;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffFailureCode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffLimits;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.AgentHandoffStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.handoff.MeshPolicyDecision;
@@ -137,6 +138,28 @@ public class KernelAgentHandoffService implements AgentHandoffInboundPort {
         AgentHandoff updated = handoffRepository.update(cancelled);
         appendFinishedAudit(updated);
         return updated;
+    }
+
+    /**
+     * Child run 到达终态后的完成态回写：success 为 true 时 handoff 置为
+     * {@code SUCCEEDED}，否则置为 {@code FAILED} 并记录 failureCode。
+     * 已处于终态的 handoff 幂等返回。
+     */
+    public AgentHandoff completeOnTerminal(String handoffId,
+                                           boolean success,
+                                           AgentHandoffFailureCode failureCode) {
+        AgentHandoff current = handoffRepository.findById(requireText(handoffId, "handoffId must not be blank"))
+                .orElseThrow(() -> new IllegalArgumentException("Agent handoff does not exist"));
+        if (current.status().isTerminal()) {
+            return current;
+        }
+        AgentHandoff updated = success
+                ? current.succeed(clock.instant())
+                : current.fail(Objects.requireNonNullElse(failureCode, AgentHandoffFailureCode.CHILD_RUN_FAILED),
+                        clock.instant());
+        AgentHandoff saved = handoffRepository.update(updated);
+        appendFinishedAudit(saved);
+        return saved;
     }
 
     @Override

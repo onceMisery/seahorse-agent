@@ -1,6 +1,6 @@
 # Public Port Inventory and Retirement Rules
 
-Updated: 2026-09-13 (metadata governance trio consolidation)
+Updated: 2026-09-13 (metadata governance trio consolidation + agent team feature ports)
 Authority: `PortArchitectureTest` and compiled source under
 `com.miracle.ai.seahorse.agent.ports`
 
@@ -8,17 +8,32 @@ Authority: `PortArchitectureTest` and compiled source under
 
 | Direction | Public interfaces | Meaning |
 | --- | ---: | --- |
-| Inbound | 92 | Capability entry points called by delivery adapters or other capabilities |
-| Outbound | 258 | Independently replaceable external/runtime boundaries |
+| Inbound | 93 | Capability entry points called by delivery adapters or other capabilities |
+| Outbound | 259 | Independently replaceable external/runtime boundaries |
 | Common | 1 | Shared boundary outside the directional packages |
-| Total | 351 | Reviewed ceiling; must only decrease |
+| Total | 353 | Reviewed ceiling; must only decrease |
 
 The inventory is measured by the public-interface ArchUnit scan, not by source
 file count. The duplicate `SreHealthReportProviderPort` boundary was retired
 in favor of `SreHealthInboundPort`; both previously exposed the same
 `SreHealthReport current()` operation and shared one implementation.
 
-The 782 Java files under `ports` are informational package-hygiene data, not
+2026-09-13 agent team feature addition (Multi-Agent A2A design §6 P1): two
+ports were added for a genuinely new capability, the first ceiling increase
+since the consolidation program began, recorded here with its §6.3
+justification so it is not mistaken for consolidation drift:
+
+- `AgentTeamInboundPort` (inbound, 5 operations: createTeam/listTeams/
+  getTeam/startTeamRun/getTeamRun) is the team-orchestration capability
+  boundary consumed by the web controller; controllers depend on inbound
+  contracts only, so a new capability API requires a new inbound Port.
+- `AgentTeamRepositoryPort` (outbound, 6 operations) is the persistence
+  boundary for `AgentTeamDefinition` and `AgentTeamRun` aggregates with a
+  JDBC adapter; replacing the store must not touch the orchestration engine.
+- Consolidation balances remain: the four consolidation waves below brought
+  legacy ports 360 -> 351, and the feature added 2, for the current 353.
+
+The 786 Java files under `ports` are informational package-hygiene data, not
 the Port count. Records, enums, commands, responses, and other value objects do
 not become architectural Ports merely because they are stored in that package.
 
@@ -265,8 +280,11 @@ that forbids the merge.
 | sandbox runtime | SandboxRuntimeInboundPort (12, legacy budget) | KEEP | reviewed legacy budget |
 | metadata management trio | MetadataExtractionResultRepositoryPort (5, merged), MetadataQuarantinePort (5, merged), MetadataReviewQueuePort (5, merged) | DONE | write+governance views of one aggregate per port merged this cycle (§6.2) |
 
-Review outcome: 351 is the honest floor for this cycle, reached with the
-metadata trio merge above, without breaching §6.3/§6.5. Reaching 300 requires
-capability-level API redesign (reducing operation counts of legacy-budget
-ports and collapsing small capabilities into their parents), which is a
-feature-cycle decision, not a consolidation-mechanical one.
+| agent team orchestration | AgentTeamInboundPort (5), AgentTeamRepositoryPort (6) | DONE | new P1 capability added this cycle with §6.3 justification (see inventory header) |
+
+Review outcome: 351 was the honest consolidation floor for this cycle, reached
+with the metadata trio merge above, without breaching §6.3/§6.5. The agent team
+P1 feature then added 2 justified capability ports (351 -> 353). Reaching 300
+requires capability-level API redesign (reducing operation counts of
+legacy-budget ports and collapsing small capabilities into their parents),
+which is a feature-cycle decision, not a consolidation-mechanical one.

@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
+package com.miracle.ai.seahorse.agent.kernel.domain.agent.team;
 
-public enum AgentRunTriggerType {
-    CHAT,
-    API,
-    SCHEDULE,
-    EVENT,
-    A2A,
-    TEAM
+/**
+ * Workflow DAG 边的执行条件。
+ *
+ * <p>ALWAYS：源节点结束后无条件触发；ON_SUCCESS：仅当源节点成功后触发。
+ * P1 执行策略为 fail-fast，源节点失败会终止整个团队运行，
+ * 因此 ON_FAILURE 条件边在本阶段不被执行器支持，定义校验会拒绝。
+ */
+public enum AgentTeamEdgeCondition {
+    ALWAYS,
+    ON_SUCCESS
 }

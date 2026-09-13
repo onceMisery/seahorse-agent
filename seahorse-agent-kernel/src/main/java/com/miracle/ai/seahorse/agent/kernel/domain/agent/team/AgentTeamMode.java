@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
+package com.miracle.ai.seahorse.agent.kernel.domain.agent.team;
 
-public enum AgentRunTriggerType {
-    CHAT,
-    API,
-    SCHEDULE,
-    EVENT,
-    A2A,
-    TEAM
+/**
+ * 团队编排模式。
+ *
+ * <p>SUPERVISOR：由 supervisor 成员规划子任务，并通过 handoff 分派给成员执行；
+ * WORKFLOW_DAG：按定义的有向无环图拓扑顺序执行成员节点。
+ */
+public enum AgentTeamMode {
+    SUPERVISOR,
+    WORKFLOW_DAG
 }

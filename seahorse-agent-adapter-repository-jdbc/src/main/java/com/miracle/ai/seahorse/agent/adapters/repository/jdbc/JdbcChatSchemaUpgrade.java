@@ -146,6 +146,7 @@ public class JdbcChatSchemaUpgrade {
         widenColumns("t_message", List.of("id", "conversation_id", "user_id"));
         ensureMessageRunLinkage();
         ensureAgentSkillTables();
+        ensureAgentTeamTables();
         widenColumns("t_message_feedback", List.of("id", "message_id", "conversation_id", "user_id"));
         alterColumnToVarcharIfExists("t_rag_trace_run", "conversation_id", TARGET_LENGTH);
         alterColumnToVarcharIfExists("t_rag_trace_run", "task_id", TARGET_LENGTH);
@@ -1012,6 +1013,41 @@ public class JdbcChatSchemaUpgrade {
             String memoryScopeJson,
             String guardrailConfigJson,
             String presetKey) {
+    }
+
+    private void ensureAgentTeamTables() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_agent_team (
+                    team_id              VARCHAR(64)  PRIMARY KEY,
+                    tenant_id            VARCHAR(64)  NOT NULL,
+                    name                 VARCHAR(128) NOT NULL,
+                    mode                 VARCHAR(32)  NOT NULL,
+                    owner_team           VARCHAR(128) DEFAULT '',
+                    supervisor_member_id VARCHAR(64),
+                    status               VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE',
+                    definition_json      TEXT         NOT NULL,
+                    created_at           TIMESTAMP    NOT NULL,
+                    updated_at           TIMESTAMP    NOT NULL
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_agent_team_run (
+                    team_run_id    VARCHAR(64)  PRIMARY KEY,
+                    team_id        VARCHAR(64)  NOT NULL,
+                    tenant_id      VARCHAR(64)  NOT NULL,
+                    user_id        VARCHAR(64),
+                    mode           VARCHAR(32)  NOT NULL,
+                    objective      TEXT,
+                    status         VARCHAR(32)  NOT NULL,
+                    parent_run_id  VARCHAR(64),
+                    summary        TEXT,
+                    error_code     VARCHAR(64),
+                    error_message  TEXT,
+                    node_runs_json TEXT,
+                    started_at     TIMESTAMP    NOT NULL,
+                    finished_at    TIMESTAMP
+                )
+                """);
     }
 
     private void ensureLayeredMemoryLifecycleColumns() {

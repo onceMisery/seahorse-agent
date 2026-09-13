@@ -9,6 +9,17 @@
 ### 核心运行时稳定性（2026-07-27 设计规范的实施批次）
 
 #### Added
+- Agent 团队编排（Multi-Agent A2A 设计 §6 P1，Supervisor/Team 编排首个后端闭环）：
+  `AgentTeamDefinition`（SUPERVISOR / WORKFLOW_DAG 两种模式，成员与协作边）
+  与 `AgentTeamRun` 聚合；`AgentTeamInboundPort`/`AgentTeamRepositoryPort`
+  （端口 351 → 353，特性驱动新增，见 port-inventory §6.3 记录）与 JDBC
+  适配器（`sa_agent_team`/`sa_agent_team_run`，V61 迁移）；`KernelAgentTeamService`
+  实现 Supervisor 规划-分派-汇总（子任务全部经由 handoff 分派，child run 与
+  handoff 完成态收敛，带审计）与 Workflow DAG 拓扑执行（P1 失败策略为
+  fail-fast）；REST API `POST/GET /api/agent-teams`、
+  `POST /api/agent-teams/{teamId}/runs`、`GET /api/agent-team-runs/{runId}`
+  （沿用 AGENT_HANDOFF feature gate）；`KernelAgentHandoffService` 补充
+  child run 终态完成回写（设计 §5.2 P0 项的首个服务内实现）。
 - 错误契约（设计 §9）补齐 `traceId` 字段（tracing 启用时由 MDC 提供），
   `retryable` 语义、`UNAUTHORIZED`/`AUTH_SESSION_INVALID`/`DB_TIMEOUT` 等稳定 code。
 - UNKNOWN 工具调用对账机制：`ToolInvocationReconciliationService` 按 30 分钟宽限期

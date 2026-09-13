@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
+package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
-public enum AgentRunTriggerType {
-    CHAT,
-    API,
-    SCHEDULE,
-    EVENT,
-    A2A,
-    TEAM
+/**
+ * 启动团队运行命令。
+ *
+ * @param objective 团队任务目标（同步执行，因此本命令不携带回调）
+ * @param userId    发起用户
+ * @param traceId   关联 trace（可空）
+ */
+public record AgentTeamRunStartCommand(String objective,
+                                       String userId,
+                                       String traceId) {
 }

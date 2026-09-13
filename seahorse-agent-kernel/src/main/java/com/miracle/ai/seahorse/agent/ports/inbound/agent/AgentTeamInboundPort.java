@@ -15,13 +15,25 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
+package com.miracle.ai.seahorse.agent.ports.inbound.agent;
 
-public enum AgentRunTriggerType {
-    CHAT,
-    API,
-    SCHEDULE,
-    EVENT,
-    A2A,
-    TEAM
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamDefinition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamRun;
+
+import java.util.List;
+
+/**
+ * Agent 团队编排入站端口：团队定义管理与团队运行（Supervisor / Workflow DAG）。
+ */
+public interface AgentTeamInboundPort {
+
+    AgentTeamDefinition createTeam(AgentTeamCreateCommand command);
+
+    List<AgentTeamDefinition> listTeams(String tenantId);
+
+    AgentTeamDefinition getTeam(String teamId);
+
+    AgentTeamRun startTeamRun(String teamId, AgentTeamRunStartCommand command);
+
+    AgentTeamRun getTeamRun(String teamRunId);
 }

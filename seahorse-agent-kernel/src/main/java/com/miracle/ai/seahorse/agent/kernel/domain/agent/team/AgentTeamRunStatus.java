@@ -15,13 +15,18 @@
  * limitations under the License.
  */
 
-package com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime;
+package com.miracle.ai.seahorse.agent.kernel.domain.agent.team;
 
-public enum AgentRunTriggerType {
-    CHAT,
-    API,
-    SCHEDULE,
-    EVENT,
-    A2A,
-    TEAM
+/**
+ * 团队运行状态。
+ */
+public enum AgentTeamRunStatus {
+    RUNNING,
+    SUCCEEDED,
+    FAILED,
+    CANCELLED;
+
+    public boolean isTerminal() {
+        return this != RUNNING;
+    }
 }
