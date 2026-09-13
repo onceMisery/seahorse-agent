@@ -235,7 +235,7 @@ termination are still required before closure.
 | Third wave: harness + sandbox artifacts | `MemoryRecallGoldenHarnessInboundPort`->`MemoryRecallEvaluationInboundPort` (harness bean = single port bean, delegates scoring), `SandboxArtifactQueryPort`->`SandboxArtifactPort` (emptyQueries() keeps optional query default) | PASS; ports 356 -> 354 (92/261/1); kernel 926/926, web/JDBC/autoconfigure/tests reactors green, architecture 16/16 |
 | Cross-domain edge dissolution | SkillRuntimeComposer/SkillSetJsonSupport -> domain.agent.skill; RunContextSnapshotRedactor -> domain.agent.output; 3 + 4 stale whitelist rows removed | PASS; whitelist 47 -> 40 (Phase 0 level); R1-R5 green |
 | Per-capability design review | docs/architecture/port-inventory.md review table | PASS; every family has keep/merge/reject verdict with §6.3/§6.5 citation; 351 (with metadata WIP) recorded as the honest floor for this cycle |
-| Fourth wave: metadata governance trio (lands the user WIP) | `MetadataExtractionResultManagementRepositoryPort`->`MetadataExtractionResultRepositoryPort`, `MetadataQuarantineManagementRepositoryPort`->`MetadataQuarantinePort`, `MetadataReviewManagementRepositoryPort`->`MetadataReviewQueuePort`; focused `-Dtest=SeahorseAgentKernelMetadataAutoConfigurationTests` and `-Dtest=KernelMetadata*ServiceTests,SeahorseAgentKernelAutoConfigurationTests,SeahorseAgentNativeAdapterAutoConfigurationTests`; `PortArchitectureTest`; spotless on kernel/jdbc/autoconfigure/tests | PASS; merged ports hold 5 cohesive operations each over one `metadata_*` table and transaction boundary; failing `empty()` semantics preserved as port defaults; single consuming services; ports 354 -> 351 (92/258/1), port files 785 -> 782; PortArchitectureTest green after ratchet |
+| Fourth wave: metadata governance trio (lands the user WIP) | `MetadataExtractionResultManagementRepositoryPort`->`MetadataExtractionResultRepositoryPort`, `MetadataQuarantineManagementRepositoryPort`->`MetadataQuarantinePort`, `MetadataReviewManagementRepositoryPort`->`MetadataReviewQueuePort`; focused `-Dtest=SeahorseAgentKernelMetadataAutoConfigurationTests` and `-Dtest=KernelMetadata*ServiceTests,SeahorseAgentKernelAutoConfigurationTests`; `PortArchitectureTest`; spotless on kernel/jdbc/autoconfigure/tests | PASS; merged ports hold 5 cohesive operations each over one `metadata_*` table and transaction boundary; failing `empty()` semantics preserved as port defaults; single consuming services; ports 354 -> 351 (92/258/1), port files 785 -> 782; PortArchitectureTest green after ratchet; `SeahorseAgentNativeAdapterAutoConfigurationTests` received only mechanical import/assertion swaps and stays integration-excluded (compile-verified; equivalent bean assertions covered by the kernel autoconfiguration suites) |
 
 ## Evidence Gaps
 
@@ -252,9 +252,11 @@ termination are still required before closure.
   not regressions from this slice.
 - Conversation/SSE/cancellation and dual-instance recovery evidence for later
   slices.
-- Port reduction from 358 to no more than 300; the two 2026-09-06 same-aggregate
-  merges started the dedicated reduction slice, and the remaining gap requires
-  further aggregate-level repository consolidation with consumer evidence.
+- Port reduction from 358 to no more than 300; four same-aggregate consolidation
+  waves (2026-09-06 x2, harness/sandbox, and the metadata trio) brought the
+  count to the 351 honest floor recorded in the per-capability design review;
+  the remaining gap requires capability-level API redesign, not mechanical
+  merges.
 - The standalone architecture-test module needs reactor/local publication of
   its three unpublished adapter SNAPSHOT dependencies before a fresh isolated
   `PortArchitectureTest` result can be recorded; the reactor result is already
