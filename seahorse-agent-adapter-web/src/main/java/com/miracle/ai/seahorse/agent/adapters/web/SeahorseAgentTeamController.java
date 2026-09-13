@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamDefinition;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamEdgeCondition;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamFailurePolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamMode;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamNodeStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.team.AgentTeamRun;
@@ -106,6 +107,8 @@ public class SeahorseAgentTeamController {
                                               String supervisorMemberId,
                                               List<AgentTeamMemberView> members,
                                               List<AgentTeamEdgeView> edges,
+                                              AgentTeamFailurePolicy failurePolicy,
+                                              Integer maxRetries,
                                               boolean active,
                                               Instant createdAt,
                                               Instant updatedAt) {
@@ -126,6 +129,8 @@ public class SeahorseAgentTeamController {
                             .map(edge -> new AgentTeamEdgeView(edge.sourceMemberId(), edge.targetMemberId(),
                                     edge.condition()))
                             .toList(),
+                    definition.failurePolicy(),
+                    definition.maxRetries(),
                     definition.isActive(),
                     definition.createdAt(),
                     definition.updatedAt());

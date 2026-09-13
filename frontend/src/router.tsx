@@ -100,6 +100,9 @@ const AgentConsolePage = lazy(() =>
 const AgentInspectorPage = lazy(() =>
   import("@/pages/admin/agent-inspector/AgentInspectorPage").then((m) => ({ default: m.AgentInspectorPage }))
 );
+const AgentTeamsPage = lazy(() =>
+  import("@/pages/admin/teams/AgentTeamsPage").then((m) => ({ default: m.AgentTeamsPage }))
+);
 const AgentListPage = lazy(() =>
   import("@/pages/admin/agents/AgentListPage").then((m) => ({ default: m.AgentListPage }))
 );
@@ -234,6 +237,7 @@ const advancedAdminRoutes = [
   { path: "ai-infra", element: withFeature(ADVANCED_ADMIN_FEATURES.AI_INFRA_CONSOLE, "Agent 控制台", <AgentConsolePage />) },
   { path: "agent-inspector", element: withFeature(ADVANCED_ADMIN_FEATURES.AI_INFRA_CONSOLE, "Agent 检视器", <AgentInspectorPage />) },
   { path: "agent-inspector/:runId", element: withFeature(ADVANCED_ADMIN_FEATURES.AI_INFRA_CONSOLE, "Agent 检视器", <AgentInspectorPage />) },
+  { path: "agent-teams", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_HANDOFF, "Agent 团队编排", <AgentTeamsPage />) },
   { path: "agents", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "Agent 管理", <AgentListPage />) },
   { path: "agents/new", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "Agent 管理", <AgentCreatePage />) },
   { path: "agents/:agentId", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_DEFINITION_MANAGEMENT, "Agent 管理", <AgentDetailPage />) },

@@ -17,10 +17,22 @@ const recentAdminEntries = [
     breadcrumb: 'skills: "Skill 管理"'
   },
   {
+    label: "Agent 检视器",
+    route: 'path: "agent-inspector"',
+    menu: 'path: "/admin/agent-inspector", feature: "AI_INFRA_CONSOLE", label: "Agent 检视器"',
+    breadcrumb: '"agent-inspector": "Agent 检视器"'
+  },
+  {
     label: "Agent 控制台",
     route: 'path: "ai-infra"',
     menu: 'path: "/admin/ai-infra", feature: "AI_INFRA_CONSOLE", label: "Agent 控制台"',
     breadcrumb: '"ai-infra": "AI Infra 控制台"'
+  },
+  {
+    label: "Agent 团队编排",
+    route: 'path: "agent-teams"',
+    menu: 'path: "/admin/agent-teams", feature: "AGENT_HANDOFF", label: "Agent 团队编排"',
+    breadcrumb: '"agent-teams": "Agent 团队编排"'
   },
   {
     label: "审批中心",

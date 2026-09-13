@@ -265,6 +265,26 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/agent-teams"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent-teams/{}"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent-teams"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent-teams/{}/runs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent-team-runs/{}"
+  },
+  {
+    "method": "GET",
     "path": "/api/agent-handoffs/{}"
   },
   {
