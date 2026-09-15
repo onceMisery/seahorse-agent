@@ -4,6 +4,7 @@
 
 agent -> memory | com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependencies | com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver | Phase 0 baseline
 agent -> trace | com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependencies | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
+agent -> trace | com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopPlanner | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | P3-1 task planning: same trace dependency pattern as AgentLoopToolExecutor
 agent -> trace | com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopToolExecutor | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
 agent -> trace | com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop | com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder | Phase 0 baseline
 agent -> mcp | com.miracle.ai.seahorse.agent.kernel.application.agent.McpToolPortAdapter | com.miracle.ai.seahorse.agent.kernel.application.mcp.KernelMcpOrchestrator | Phase 0 baseline

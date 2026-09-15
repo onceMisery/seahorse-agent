@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.miracle.ai.seahorse.agent.adapters.spring.properties.TaskPlanningProperties;
 import com.miracle.ai.seahorse.agent.adapters.web.AdvancedFeatureGate;
 import com.miracle.ai.seahorse.agent.adapters.web.ProductMode;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.AgentLoopDependencies;
@@ -57,6 +58,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GitHubReposit
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ImageGenerationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.KernelToolResultSpillService;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.LoadSkillResourceToolPortAdapter;
+import com.miracle.ai.seahorse.agent.kernel.policy.TaskPlanningPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.DescribedToolPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryForgetToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.MemoryReadToolPortAdapter;
@@ -137,6 +139,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.convert.DurationStyle;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
@@ -170,6 +173,7 @@ import java.util.Map;
 })
 @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
         matchIfMissing = true)
+@EnableConfigurationProperties(TaskPlanningProperties.class)
 public class SeahorseAgentKernelAgentAutoConfiguration {
 
     private static final String PROP_AGENT_ENABLED = "seahorse-agent.chat.agent-mode-enabled";
@@ -264,7 +268,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     @Bean
     @ConditionalOnAgentRuntimeEnabled
     @ConditionalOnMissingBean
-    public KernelAgentLoopOptions seahorseKernelAgentLoopOptions(Environment environment) {
+    public KernelAgentLoopOptions seahorseKernelAgentLoopOptions(Environment environment,
+                                                                TaskPlanningProperties taskPlanning) {
         return KernelAgentLoopOptions.builder()
                 .maxSteps(environment.getProperty(PROP_MAX_STEPS, Integer.class, 6))
                 .perToolTimeout(parseDuration(environment.getProperty(PROP_PER_TOOL_TIMEOUT), Duration.ofSeconds(30)))
@@ -298,6 +303,9 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                         environment.getProperty(
                                 PROP_CONTEXT_ENVELOPE_PREFIX + ".tool-overhead-tokens",
                                 Integer.class, 12)))
+                .taskPlanning(taskPlanning == null
+                        ? TaskPlanningPolicy.defaults()
+                        : taskPlanning.toPolicy())
                 .build();
     }
 

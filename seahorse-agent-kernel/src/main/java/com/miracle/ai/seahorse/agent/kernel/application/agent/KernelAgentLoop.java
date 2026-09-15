@@ -38,7 +38,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentStep;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactType;
-import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.CredentialTextRedactor;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.plan.TaskPlan;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputGovernanceResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
@@ -139,6 +139,8 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
     private final AgentLoopStreamEvents streamEvents;
     private final AgentLoopModelTurns modelTurns;
     private final AgentLoopToolExecutor toolExecutor;
+    // 任务规划（P3-1）：策略关闭时完全不参与循环，行为与引入前一致。
+    private final AgentLoopPlanner planner;
 
     public KernelAgentLoop(AgentLoopDependencies dependencies) {
         AgentLoopDependencies deps = Objects.requireNonNull(dependencies, "dependencies must not be null");
@@ -157,6 +159,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                 deps.modelContextWindow(), this.options.contextEnvelope(), deps.contextCalibrationCache());
         this.toolExecutor = new AgentLoopToolExecutor(options, toolGateway, traceRecorder, runStepRecorder,
                 modelTurns);
+        this.planner = new AgentLoopPlanner(options.taskPlanning(), traceRecorder, runStepRecorder);
     }
 
     public AgentLoopResult execute(AgentLoopRequest request) {
@@ -235,6 +238,9 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
             modelTurns.installLegacyRuntimeContext(request, messages);
         }
         streamEvents.emitSkillRuntimeEvents(callback, request);
+        TaskPlan plan = planner.planRun(request, traceRunScope,
+                Math.min(request.maxSteps(), options.maxSteps()));
+        planner.appendPlan(plan, messages);
         messages.add(ChatMessage.user(request.question()));
 
         List<AgentStep> steps = new ArrayList<>();
@@ -249,6 +255,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
             streamEvents.emitStepStarted(callback, request, stepId, stepNo, stepStartedAt);
             TraceNodeScope stepScope = traceRecorder.startNode(traceRunScope, agentStepCommand(stepNo));
             boolean modelTurnRecorded = false;
+            plan = planner.startStep(plan, request, step);
             try {
                 ModelTurn turn = requestModelTurnTraced(
                         request, messages, runControl, exhaustedToolIds, traceRunScope, stepScope, false);
@@ -263,6 +270,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                     streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
                             null, finalContent);
                     streamEvents.emitComplete(callback);
+                    plan = planner.completeStep(plan, request, step);
                     traceRecorder.finishNode(stepScope);
                     return new AgentLoopResult(finalContent, steps, false);
                 }
@@ -318,6 +326,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                 }
                 streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
                         null, null);
+                plan = planner.completeStep(plan, request, step);
                 traceRecorder.finishNode(stepScope);
             } catch (RuntimeException ex) {
                 if (!modelTurnRecorded) {
@@ -326,6 +335,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                 streamEvents.emitRecoverableError(callback, request, stepId, ex);
                 streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
                         ex, null);
+                plan = planner.failStep(plan, request, step);
                 traceRecorder.finishNode(stepScope, ex);
                 if (hasToolObservations && ModelFailureSanitizer.isModelTurnTimeout(ex)) {
                     return completeWithDegradedFinalAnswer(request, steps, callback, ex);
@@ -398,49 +408,12 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                                                             List<AgentStep> steps,
                                                             StreamCallback callback,
                                                             RuntimeException timeout) {
-        String finalContent = degradedFinalAnswer(steps, timeout);
+        String finalContent = AgentLoopDegradedAnswer.render(steps, timeout);
         streamEvents.emitContent(callback, finalContent);
         streamEvents.emitFinalArtifact(callback, request, finalContent);
         steps.add(AgentStep.finalAnswer(finalContent));
         streamEvents.emitComplete(callback);
         return new AgentLoopResult(finalContent, steps, true);
-    }
-
-    private String degradedFinalAnswer(List<AgentStep> steps, RuntimeException timeout) {
-        StringBuilder markdown = new StringBuilder();
-        markdown.append("# Agent Run Result\n\n");
-        markdown.append("The model timed out while preparing the next turn, ");
-        markdown.append("so Seahorse returned the completed tool results instead of leaving the task running.\n\n");
-        markdown.append("Timeout: ").append(redactForDegradedAnswer(
-                Objects.requireNonNullElse(timeout.getMessage(), "unknown"))).append("\n\n");
-        markdown.append("## Completed Tool Results\n\n");
-        int count = 0;
-        for (AgentStep step : steps) {
-            for (int i = 0; i < step.observations().size(); i++) {
-                AgentObservation observation = step.observations().get(i);
-                if (observation == null || !observation.success()) {
-                    continue;
-                }
-                String toolId = i < step.toolCalls().size() ? step.toolCalls().get(i).toolId() : observation.toolCallId();
-                markdown.append("### ").append(++count).append(". ")
-                        .append(redactForDegradedAnswer(toolId)).append("\n\n");
-                markdown.append(trimForDegradedAnswer(observation.content())).append("\n\n");
-            }
-        }
-        if (count == 0) {
-            markdown.append("No successful tool observations were available.\n");
-        }
-        return markdown.toString().trim();
-    }
-
-    private String trimForDegradedAnswer(String value) {
-        String safe = redactForDegradedAnswer(Objects.requireNonNullElse(value, "")).trim();
-        int limit = 1200;
-        return safe.length() <= limit ? safe : safe.substring(0, limit) + "\n\n...(truncated)";
-    }
-
-    private String redactForDegradedAnswer(String value) {
-        return CredentialTextRedactor.redact(value);
     }
 
     private boolean isApprovalRequired(AgentObservation observation) {

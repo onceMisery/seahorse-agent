@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.agent.runtime;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentObservation;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentToolCall;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.plan.TaskPlan;
 
 import java.util.List;
 
@@ -27,6 +28,20 @@ public interface AgentRunStepRecorder {
     void recordModelTurn(String runId, String inputJson, String outputJson, Throwable error);
 
     void recordToolCall(String runId, AgentToolCall toolCall, AgentObservation observation);
+
+    /**
+     * 记录一次任务规划结果或规划失败。
+     *
+     * <p>默认是空实现：既有的 {@link #noop()} 与所有已存在的实现都不需要为此改动，
+     * 只有真正关心规划轨迹的实现才覆写它。规划是可选能力，记录失败不得影响循环本身。
+     *
+     * @param runId 运行标识
+     * @param plan  规划结果，规划失败时为 {@code null}
+     * @param error 规划失败原因，成功时为 {@code null}
+     */
+    default void recordTaskPlan(String runId, TaskPlan plan, Throwable error) {
+        // 默认不落库：规划轨迹先由 trace 与日志承载，接入方按需覆写。
+    }
 
     static AgentRunStepRecorder noop() {
         return new AgentRunStepRecorder() {

@@ -17,11 +17,13 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
+import com.miracle.ai.seahorse.agent.kernel.policy.TaskPlanningPolicy;
+
 import java.time.Duration;
 import java.util.Objects;
 
 /**
- * KernelAgentLoop 配置项：循环上限、单工具超时、最大并发工具数。
+ * KernelAgentLoop 配置项：循环上限、单工具超时、最大并发工具数、任务规划策略。
  */
 public final class KernelAgentLoopOptions {
 
@@ -35,6 +37,7 @@ public final class KernelAgentLoopOptions {
     private final Duration modelTurnTimeout;
     private final int maxParallelTools;
     private final ModelContextEnvelopeOptions contextEnvelope;
+    private final TaskPlanningPolicy taskPlanning;
 
     private KernelAgentLoopOptions(Builder b) {
         if (b.maxSteps <= 0) {
@@ -57,6 +60,7 @@ public final class KernelAgentLoopOptions {
         this.maxParallelTools = b.maxParallelTools;
         this.contextEnvelope = Objects.requireNonNullElseGet(
                 b.contextEnvelope, ModelContextEnvelopeOptions::defaults);
+        this.taskPlanning = Objects.requireNonNullElseGet(b.taskPlanning, TaskPlanningPolicy::defaults);
     }
 
     public int maxSteps() {
@@ -79,6 +83,13 @@ public final class KernelAgentLoopOptions {
         return contextEnvelope;
     }
 
+    /**
+     * @return 任务规划策略，默认关闭（{@link TaskPlanningPolicy#defaults()}）
+     */
+    public TaskPlanningPolicy taskPlanning() {
+        return taskPlanning;
+    }
+
     public static KernelAgentLoopOptions defaults() {
         return builder().build();
     }
@@ -93,6 +104,7 @@ public final class KernelAgentLoopOptions {
         private Duration modelTurnTimeout = DEFAULT_MODEL_TURN_TIMEOUT;
         private int maxParallelTools = DEFAULT_MAX_PARALLEL_TOOLS;
         private ModelContextEnvelopeOptions contextEnvelope = ModelContextEnvelopeOptions.defaults();
+        private TaskPlanningPolicy taskPlanning = TaskPlanningPolicy.defaults();
 
         public Builder maxSteps(int maxSteps) {
             this.maxSteps = maxSteps;
@@ -116,6 +128,11 @@ public final class KernelAgentLoopOptions {
 
         public Builder contextEnvelope(ModelContextEnvelopeOptions contextEnvelope) {
             this.contextEnvelope = contextEnvelope;
+            return this;
+        }
+
+        public Builder taskPlanning(TaskPlanningPolicy taskPlanning) {
+            this.taskPlanning = taskPlanning;
             return this;
         }
 
