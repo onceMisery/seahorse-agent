@@ -17,18 +17,27 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.memory;
 
+import com.miracle.ai.seahorse.agent.kernel.policy.MemoryRoutingPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRoutePlan;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouteRequest;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryRouterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryTrack;
 
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
 public class DefaultMemoryRouter implements MemoryRouterPort {
 
+    private final MemoryRoutingPolicy policy;
+
     public DefaultMemoryRouter() {
+        this(MemoryRoutingPolicy.defaults());
+    }
+
+    public DefaultMemoryRouter(MemoryRoutingPolicy policy) {
+        this.policy = Objects.requireNonNull(policy, "policy must not be null");
     }
 
     @Override
@@ -47,15 +56,12 @@ public class DefaultMemoryRouter implements MemoryRouterPort {
         // profile-flavored questions. Episodic/business tracks stay keyword-gated.
         EnumSet<MemoryTrack> tracks = EnumSet.of(MemoryTrack.CORRECTION, MemoryTrack.SHORT_WINDOW,
                 MemoryTrack.PROFILE);
-        boolean correctionQuestion = containsAny(question, "不是", "错了", "改成", "以后别", "忘记")
-                || containsAny(lower, "not anymore", "wrong", "correct", "change to", "forget");
-        boolean businessQuestion = containsAny(question, "知识库", "文档", "规则", "制度", "流程", "阈值", "接口", "API")
-                || containsAny(lower, "knowledge", "document", "policy", "rule", "process",
-                "threshold", "api");
-        boolean episodicQuestion = containsAny(question, "上次", "之前", "历史", "项目", "决策", "讨论过", "做过",
-                "长期记忆", "记忆", "记得")
-                || containsAny(lower, "last time", "previous", "history", "project", "decision",
-                "discussed", "remember when", "long-term memory");
+        boolean correctionQuestion = containsAny(question, policy.correctionKeywords())
+                || containsAny(lower, policy.correctionKeywordsLatin());
+        boolean businessQuestion = containsAny(question, policy.businessKeywords())
+                || containsAny(lower, policy.businessKeywordsLatin());
+        boolean episodicQuestion = containsAny(question, policy.episodicKeywords())
+                || containsAny(lower, policy.episodicKeywordsLatin());
 
         if (businessQuestion) {
             tracks.add(MemoryTrack.BUSINESS_DOCUMENT);
@@ -66,7 +72,7 @@ public class DefaultMemoryRouter implements MemoryRouterPort {
         return new MemoryRoutePlan(tracks);
     }
 
-    private boolean containsAny(String content, String... needles) {
+    private boolean containsAny(String content, List<String> needles) {
         if (content == null || needles == null) {
             return false;
         }

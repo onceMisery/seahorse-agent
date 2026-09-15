@@ -38,6 +38,9 @@ import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryGovernanceS
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryManagementServicePorts;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryOutboxRelayService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.RuleBasedMemoryCandidateExtractor;
+import com.miracle.ai.seahorse.agent.adapters.spring.properties.MemoryPolicyProperties;
+import com.miracle.ai.seahorse.agent.kernel.policy.MemoryExtractionPolicy;
+import com.miracle.ai.seahorse.agent.kernel.policy.MemoryRoutingPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.UserMemoryPrivacyAwareMemoryEnginePort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.DefaultMemoryAggregationService;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.aggregation.ExplicitCueMemoryAggregationTopicShiftDetector;
@@ -160,7 +163,8 @@ import java.util.concurrent.Executor;
         SeahorseAgentMemoryRepositoryAutoConfiguration.class
 })
 @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties({MemoryProperties.class, MemoryCaptureRuleProperties.class})
+@EnableConfigurationProperties({MemoryProperties.class, MemoryCaptureRuleProperties.class,
+        MemoryPolicyProperties.class})
 public class SeahorseAgentKernelMemoryAutoConfiguration {
 
     private static final String MEMORY_REFINER_ENABLED_PROPERTY = "seahorse.agent.memory.refiner.enabled";
@@ -384,9 +388,23 @@ public class SeahorseAgentKernelMemoryAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    public MemoryRoutingPolicy seahorseMemoryRoutingPolicy(MemoryPolicyProperties memoryPolicyProperties) {
+        return memoryPolicyProperties.toRoutingPolicy();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public MemoryExtractionPolicy seahorseMemoryExtractionPolicy(MemoryPolicyProperties memoryPolicyProperties) {
+        return memoryPolicyProperties.toExtractionPolicy();
+    }
+
+    @Bean
     @ConditionalOnMissingBean(MemoryInferencePort.class)
-    public MemoryInferencePort seahorseRuleBasedMemoryCandidateExtractor() {
-        return new RuleBasedMemoryCandidateExtractor();
+    public MemoryInferencePort seahorseRuleBasedMemoryCandidateExtractor(
+            ObjectProvider<MemoryExtractionPolicy> memoryExtractionPolicy) {
+        return new RuleBasedMemoryCandidateExtractor(
+                memoryExtractionPolicy.getIfAvailable(MemoryExtractionPolicy::defaults));
     }
 
     @Bean

@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miracle.ai.seahorse.agent.adapters.spring.properties.MemoryProperties;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryRetrievalPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultMemoryRouter;
+import com.miracle.ai.seahorse.agent.kernel.policy.MemoryRoutingPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.MemoryEngineOptions;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.ClasspathMemoryRecallGoldenCaseRepository;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.retrieval.GraphMemoryRecallChannel;
@@ -101,8 +102,9 @@ public class SeahorseAgentMemoryRecallAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(MemoryRouterPort.class)
-    public DefaultMemoryRouter seahorseDefaultMemoryRouter() {
-        return new DefaultMemoryRouter();
+    public DefaultMemoryRouter seahorseDefaultMemoryRouter(
+            ObjectProvider<MemoryRoutingPolicy> memoryRoutingPolicy) {
+        return new DefaultMemoryRouter(memoryRoutingPolicy.getIfAvailable(MemoryRoutingPolicy::defaults));
     }
 
     @Bean
