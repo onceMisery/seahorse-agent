@@ -45,12 +45,50 @@ class SeahorseAgentNoopPortGuardTests {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(SeahorseAgentRuntimeGuardAutoConfiguration.class));
 
+    /**
+     * 关闭 A 类强制后的运行器，用于观察纯检测结果。
+     *
+     * <p>默认（强制）模式下 inspect() 遇到缺失或 noop 的 A 类端口会先抛出异常，无法断言
+     * missing / noop 的分类，因此检测类断言必须在不强制的上下文中进行。
+     */
+    private final ApplicationContextRunner detectionRunner = contextRunner
+            .withPropertyValues("seahorse-agent.runtime.noop-guard.enforce-class-a=false");
+
     @Test
     void registersGuardBeanByDefault() {
-        contextRunner.run(context -> {
+        detectionRunner.run(context -> {
             assertThat(context).hasNotFailed();
             assertThat(context).hasSingleBean(SeahorseAgentNoopPortGuard.class);
         });
+    }
+
+    @Test
+    void enforcesClassAByDefaultWithoutProductModeOptIn() {
+        contextRunner.run(context -> assertThat(context)
+                .hasFailed()
+                .getFailure()
+                .isInstanceOf(SeahorseAgentNoopPortGuard.NoopFallbackEnforcementException.class)
+                .hasMessageContaining("missing"));
+    }
+
+    @Test
+    void enforcesClassAEvenInDemoProductMode() {
+        contextRunner
+                .withPropertyValues("seahorse-agent.product-mode=demo")
+                .run(context -> assertThat(context)
+                        .hasFailed()
+                        .getFailure()
+                        .isInstanceOf(SeahorseAgentNoopPortGuard.NoopFallbackEnforcementException.class));
+    }
+
+    @Test
+    void canStillOptOutOfEnforcement() {
+        contextRunner
+                .withPropertyValues("seahorse-agent.runtime.noop-guard.enforce-class-a=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(SeahorseAgentNoopPortGuard.class);
+                });
     }
 
     @Test
@@ -62,7 +100,7 @@ class SeahorseAgentNoopPortGuardTests {
 
     @Test
     void identifiesNoopFallbackOnOptionalPort() {
-        contextRunner
+        detectionRunner
                 .withUserConfiguration(NoopOutputRecordConfiguration.class)
                 .run(context -> {
                     SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
@@ -81,7 +119,7 @@ class SeahorseAgentNoopPortGuardTests {
 
     @Test
     void identifiesRealImplementationOnOptionalPort() {
-        contextRunner
+        detectionRunner
                 .withUserConfiguration(RealOutputRecordConfiguration.class)
                 .run(context -> {
                     SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
@@ -98,7 +136,7 @@ class SeahorseAgentNoopPortGuardTests {
 
     @Test
     void reportsMissingWhenPortNotRegistered() {
-        contextRunner.run(context -> {
+        detectionRunner.run(context -> {
             SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
             java.util.List<SeahorseAgentNoopPortGuard.Inspection> inspections = guard.inspect();
             assertThat(inspections).isNotEmpty();
@@ -108,7 +146,7 @@ class SeahorseAgentNoopPortGuardTests {
 
     @Test
     void coversNewSlice2bClassAPortsInDefaultClassification() {
-        contextRunner.run(context -> {
+        detectionRunner.run(context -> {
             SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
             java.util.Set<Class<?>> portClasses = guard.inspect().stream()
                     .map(SeahorseAgentNoopPortGuard.Inspection::portClass)
@@ -125,7 +163,7 @@ class SeahorseAgentNoopPortGuardTests {
 
     @Test
     void coversSlice2cClassBAndClassCPortsInDefaultClassification() {
-        contextRunner.run(context -> {
+        detectionRunner.run(context -> {
             SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
             java.util.Map<Class<?>, SeahorseAgentNoopPortGuard.RiskClass> byClass = guard.inspect().stream()
                     .collect(java.util.stream.Collectors.toMap(
@@ -147,7 +185,7 @@ class SeahorseAgentNoopPortGuardTests {
 
     @Test
     void detectsNoopFallbackForClassBVectorPort() {
-        contextRunner
+        detectionRunner
                 .withUserConfiguration(NoopMemoryVectorConfiguration.class)
                 .run(context -> {
                     SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);
@@ -169,7 +207,7 @@ class SeahorseAgentNoopPortGuardTests {
 
     @Test
     void detectsNoopFallbackForClassCRefinerPort() {
-        contextRunner
+        detectionRunner
                 .withUserConfiguration(NoopRefinerConfiguration.class)
                 .run(context -> {
                     SeahorseAgentNoopPortGuard guard = context.getBean(SeahorseAgentNoopPortGuard.class);

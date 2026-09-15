@@ -47,13 +47,14 @@ import java.util.Objects;
  * Spec §7 生产 noop 风险治理：Slice 2a 骨架。
  *
  * <p>本组件在启动期扫描已注册的关键端口，区分真实实现与 {@link NoopFallback} fallback，并按风险等级
- * 报告结果。Slice 2a 仅做检测与日志，不强制 fail-fast；后续 Slice 2b 将完成更多端口转换以及生产策略强制。
+ * 报告结果。A 类端口默认强制 fail-fast，B/C 类仅记录日志。
  *
  * <p>配置开关：
  * <ul>
- *     <li>{@code seahorse.agent.runtime.noop-guard.enabled} — 默认 {@code true}；置为 {@code false} 关闭。</li>
- *     <li>{@code seahorse.agent.runtime.noop-guard.enforce-class-a} — 默认 {@code false}；置为 {@code true}
- *         时检测到 A 类 noop fallback 立即抛出 {@link NoopFallbackEnforcementException}。</li>
+ *     <li>{@code seahorse-agent.runtime.noop-guard.enabled} — 默认 {@code true}；置为 {@code false} 关闭。</li>
+ *     <li>{@code seahorse-agent.runtime.noop-guard.enforce-class-a} — 默认 {@code true}；置为 {@code false}
+ *         时恢复"仅告警"的旧行为（此前该默认值由 {@code product-mode} 决定，而 {@code product-mode}
+ *         默认为 {@code demo}，等于默认不强制）。</li>
  * </ul>
  */
 public class SeahorseAgentNoopPortGuard implements SmartInitializingSingleton {
