@@ -79,7 +79,7 @@ class DefaultContextWeaverContextPackTests {
     }
 
     @Test
-    void shouldMergeContextPackWithLegacyMemoryWhenBothExist() {
+    void shouldPreferContextPackOverLegacyMemoryWhenBothExist() {
         DefaultContextWeaver weaver = new DefaultContextWeaver();
         MemoryContext memoryContext = MemoryContext.builder()
                 .profileMemories(List.of(MemoryItem.builder().content("legacy memory").build()))
@@ -91,13 +91,28 @@ class DefaultContextWeaverContextPackTests {
                 memoryContext,
                 ContextBudget.defaults());
 
-        // the pack section and the strong-fact memory section must both survive:
-        // a non-blank ContextPack no longer discards the user's profile/correction facts
+        // ContextPack 是本轮运行的授权事实源：贡献出可用条目后，legacy 记忆不再拼进同一段提示。
+        // 否则紧随 pack 收尾语“只使用下列 ContextPack 条目”追加无归属记忆，该指令会自相矛盾。
+        // 强事实的正规通道是 ContextPackRuntimeAssembler（带 ResourceRef 与 citation），不在这里。
         assertTrue(prompt.contains("ContextPack"));
         assertTrue(prompt.contains("context pack content"));
+        assertTrue(prompt.contains("aclDecision=decision-1"));
+        assertFalse(prompt.contains("用户记忆上下文"));
+        assertFalse(prompt.contains("legacy memory"));
+    }
+
+    @Test
+    void shouldFallBackToLegacyMemoryWhenContextPackIsAbsent() {
+        DefaultContextWeaver weaver = new DefaultContextWeaver();
+        MemoryContext memoryContext = MemoryContext.builder()
+                .profileMemories(List.of(MemoryItem.builder().content("legacy memory").build()))
+                .build();
+
+        String prompt = weaver.weave(null, memoryContext, ContextBudget.defaults());
+
+        assertFalse(prompt.contains("ContextPack"));
         assertTrue(prompt.contains("用户记忆上下文"));
         assertTrue(prompt.contains("legacy memory"));
-        assertTrue(prompt.indexOf("context pack content") < prompt.indexOf("legacy memory"));
     }
 
     @Test
