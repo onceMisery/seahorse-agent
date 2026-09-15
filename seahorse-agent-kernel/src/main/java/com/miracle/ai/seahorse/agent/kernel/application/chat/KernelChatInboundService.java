@@ -27,6 +27,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.ReActExecutorPort;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoopOptions;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillRuntimeComposer;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.SkillSetJsonSupport;
+import com.miracle.ai.seahorse.agent.kernel.policy.SkillMatchPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.ChartVisualizationToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.FrontendDesignToolPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.tool.GetDateTimeToolPortAdapter;
@@ -149,6 +150,7 @@ public class KernelChatInboundService implements ChatInboundPort {
         private RunContextSnapshotRepositoryPort runContextSnapshotRepository;
         private RunProfileInboundPort runProfilePort;
         private List<AgentRunMetadataContributor> agentRunMetadataContributors = List.of();
+        private SkillMatchPolicy skillMatchPolicy = SkillMatchPolicy.defaults();
 
         public Builder chatPipeline(KernelChatPipeline chatPipeline) {
             this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
@@ -254,6 +256,11 @@ public class KernelChatInboundService implements ChatInboundPort {
             return this;
         }
 
+        public Builder skillMatchPolicy(SkillMatchPolicy skillMatchPolicy) {
+            this.skillMatchPolicy = skillMatchPolicy == null ? SkillMatchPolicy.defaults() : skillMatchPolicy;
+            return this;
+        }
+
         public KernelChatInboundService build() {
             return new KernelChatInboundService(
                     chatPipeline,
@@ -275,7 +282,8 @@ public class KernelChatInboundService implements ChatInboundPort {
                     Optional.ofNullable(costUsageRepository),
                     Optional.ofNullable(runContextSnapshotRepository),
                     Optional.ofNullable(runProfilePort),
-                    agentRunMetadataContributors);
+                    agentRunMetadataContributors,
+                    skillMatchPolicy);
         }
     }
 
@@ -298,7 +306,8 @@ public class KernelChatInboundService implements ChatInboundPort {
                                     Optional<CostUsageRepositoryPort> costUsageRepository,
                                     Optional<RunContextSnapshotRepositoryPort> runContextSnapshotRepository,
                                     Optional<RunProfileInboundPort> runProfilePort,
-                                    List<AgentRunMetadataContributor> agentRunMetadataContributors) {
+                                    List<AgentRunMetadataContributor> agentRunMetadataContributors,
+                                    SkillMatchPolicy skillMatchPolicy) {
         this.chatPipeline = Objects.requireNonNull(chatPipeline, "chatPipeline must not be null");
         this.streamTaskPort = Objects.requireNonNull(streamTaskPort, "streamTaskPort must not be null");
         this.agentLoop = agentLoop == null ? Optional.empty() : agentLoop.map(ReActExecutorPort.class::cast);
@@ -313,7 +322,7 @@ public class KernelChatInboundService implements ChatInboundPort {
                 : new ChatSelectedSkillResolver(skillRepository.get());
         SkillSmartMatcher skillSmartMatcher = (enableSmartSkillMatching
                         && skillRepository != null && skillRepository.isPresent())
-                ? new SkillSmartMatcher(skillRepository.get())
+                ? new SkillSmartMatcher(skillRepository.get(), skillMatchPolicy)
                 : null;
         this.toolSupport = new KernelChatToolSupport(
                 modelConfigSupport,

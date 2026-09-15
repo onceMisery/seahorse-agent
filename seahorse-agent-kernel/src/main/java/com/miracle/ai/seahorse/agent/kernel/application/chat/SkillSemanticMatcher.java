@@ -19,6 +19,7 @@ package com.miracle.ai.seahorse.agent.kernel.application.chat;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkill;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.skill.AgentSkillStatus;
+import com.miracle.ai.seahorse.agent.kernel.policy.SkillMatchPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SkillVectorIndexRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SkillVectorIndexRepositoryPort.SkillSearchResult;
@@ -51,18 +52,13 @@ public class SkillSemanticMatcher {
 
     private static final String DEFAULT_TENANT_ID = TenantConstants.DEFAULT_TENANT_ID;
     private static final int DEFAULT_MAX_RECOMMENDATIONS = 3;
-    private static final float MIN_SIMILARITY_THRESHOLD = 0.6f;
-    private static final float MIN_HYBRID_SCORE_THRESHOLD = 0.1f;
-    private static final float VECTOR_WEIGHT = 0.7f;
-    private static final float RULE_WEIGHT = 0.3f;
-    private static final float STRONG_RULE_MATCH_THRESHOLD = 0.3f;
-    private static final float STRONG_RULE_MATCH_BOOST = 0.35f;
 
     private final EmbeddingPort embeddingPort;
     private final SkillVectorIndexRepositoryPort vectorRepository;
     private final AgentSkillRepositoryPort skillRepository;
     private final SkillSmartMatcher fallbackMatcher;
     private final int maxRecommendations;
+    private final SkillMatchPolicy policy;
 
     public SkillSemanticMatcher(EmbeddingPort embeddingPort,
                                  SkillVectorIndexRepositoryPort vectorRepository,
@@ -74,10 +70,26 @@ public class SkillSemanticMatcher {
                                  SkillVectorIndexRepositoryPort vectorRepository,
                                  AgentSkillRepositoryPort skillRepository,
                                  int maxRecommendations) {
+        this(embeddingPort, vectorRepository, skillRepository, maxRecommendations, SkillMatchPolicy.defaults());
+    }
+
+    public SkillSemanticMatcher(EmbeddingPort embeddingPort,
+                                 SkillVectorIndexRepositoryPort vectorRepository,
+                                 AgentSkillRepositoryPort skillRepository,
+                                 SkillMatchPolicy policy) {
+        this(embeddingPort, vectorRepository, skillRepository, DEFAULT_MAX_RECOMMENDATIONS, policy);
+    }
+
+    public SkillSemanticMatcher(EmbeddingPort embeddingPort,
+                                 SkillVectorIndexRepositoryPort vectorRepository,
+                                 AgentSkillRepositoryPort skillRepository,
+                                 int maxRecommendations,
+                                 SkillMatchPolicy policy) {
         this.embeddingPort = Objects.requireNonNull(embeddingPort, "embeddingPort must not be null");
         this.vectorRepository = Objects.requireNonNull(vectorRepository, "vectorRepository must not be null");
         this.skillRepository = Objects.requireNonNull(skillRepository, "skillRepository must not be null");
-        this.fallbackMatcher = new SkillSmartMatcher(skillRepository, maxRecommendations);
+        this.policy = Objects.requireNonNull(policy, "policy must not be null");
+        this.fallbackMatcher = new SkillSmartMatcher(skillRepository, maxRecommendations, policy);
         this.maxRecommendations = maxRecommendations <= 0 ? DEFAULT_MAX_RECOMMENDATIONS : maxRecommendations;
     }
 
@@ -122,7 +134,7 @@ public class SkillSemanticMatcher {
 
             // 4. 过滤、排序、截取
             List<String> recommendations = hybridScores.stream()
-                    .filter(score -> score.score >= MIN_HYBRID_SCORE_THRESHOLD)
+                    .filter(score -> score.score >= policy.minHybridScoreThreshold())
                     .sorted(Comparator.comparingDouble(SkillScore::score).reversed())
                     .limit(maxRecommendations)
                     .map(SkillScore::skillName)
@@ -169,15 +181,15 @@ public class SkillSemanticMatcher {
             float ruleScore = calculateRuleScore(result.skillName(), keywords);
 
             // 混合得分
-            float hybridScore = vectorScore * VECTOR_WEIGHT + ruleScore * RULE_WEIGHT;
+            float hybridScore = vectorScore * policy.vectorWeight() + ruleScore * policy.ruleWeight();
 
             scores.merge(result.skillName(), hybridScore, Math::max);
         }
 
         for (SkillSmartMatcher.SkillScore ruleScore : fallbackMatcher.matchWithScores(tenantId, question)) {
             float weightedRuleScore = (float) ruleScore.score();
-            if (weightedRuleScore >= STRONG_RULE_MATCH_THRESHOLD) {
-                weightedRuleScore = Math.min(1.0f, weightedRuleScore + STRONG_RULE_MATCH_BOOST);
+            if (weightedRuleScore >= policy.strongRuleMatchThreshold()) {
+                weightedRuleScore = Math.min(1.0f, weightedRuleScore + policy.strongRuleMatchBoost());
             }
             scores.merge(ruleScore.skillName(), weightedRuleScore, Math::max);
         }
@@ -203,7 +215,7 @@ public class SkillSemanticMatcher {
     private boolean hasAcceptableSimilarity(SkillSearchResult result) {
         return result != null
                 && Float.isFinite(result.score())
-                && result.score() >= MIN_SIMILARITY_THRESHOLD;
+                && result.score() >= policy.minSimilarityThreshold();
     }
 
     /**
@@ -230,19 +242,13 @@ public class SkillSemanticMatcher {
     private Set<String> extractKeywords(String text) {
         return Arrays.stream(text.toLowerCase().split("\\s+"))
                 .filter(word -> word.length() > 2)
-                .filter(word -> !STOP_WORDS.contains(word))
+                .filter(word -> !policy.semanticStopWords().contains(word))
                 .collect(Collectors.toSet());
     }
 
     private String defaultTenantId(String tenantId) {
         return tenantId == null || tenantId.isBlank() ? DEFAULT_TENANT_ID : tenantId.trim();
     }
-
-    private static final Set<String> STOP_WORDS = Set.of(
-            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
-            "我", "你", "他", "她", "它", "的", "了", "是", "在", "有", "这", "那", "个",
-            "请", "帮", "帮我", "能", "可以", "需要", "想", "要"
-    );
 
     /**
      * Skill 评分记录。

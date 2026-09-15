@@ -34,6 +34,8 @@ import com.miracle.ai.seahorse.agent.kernel.application.chat.ConversationAttachm
 import com.miracle.ai.seahorse.agent.kernel.application.chat.InteractiveMemoryConflictPromptPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelAgentExternalInvocationInboundService;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatInboundService;
+import com.miracle.ai.seahorse.agent.adapters.spring.properties.SkillMatchProperties;
+import com.miracle.ai.seahorse.agent.kernel.policy.SkillMatchPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.KernelChatPipeline;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.RuleBasedQueryOptimizerPort;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
@@ -98,7 +100,7 @@ import org.springframework.core.env.Environment;
  * <p>该配置收拢查询优化、流任务默认实现、聊天管线与入口装配，避免主 kernel 配置继续承担聊天主链路细节。
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(AgentKernelProperties.class)
+@EnableConfigurationProperties({AgentKernelProperties.class, SkillMatchProperties.class})
 @AutoConfigureAfter({SeahorseAgentKernelAutoConfiguration.class, SeahorseAgentKernelMemoryAutoConfiguration.class,
         SeahorseAgentMemoryRepositoryAutoConfiguration.class, SeahorseAgentAiAdapterAutoConfiguration.class,
         SeahorseAgentKernelRegistryAutoConfiguration.class, SeahorseAgentKernelAgentAutoConfiguration.class,
@@ -273,7 +275,8 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                                                    ObjectProvider<RunProfileInboundPort> runProfilePort,
                                                    ObjectProvider<AgentRunMetadataContributor> agentRunMetadataContributors,
                                                    Environment environment,
-                                                   AgentKernelProperties kernelProperties) {
+                                                   AgentKernelProperties kernelProperties,
+                                                   SkillMatchPolicy skillMatchPolicy) {
         return KernelChatInboundService.builder()
                 .chatPipeline(chatPipeline)
                 .streamTaskPort(streamTaskPort)
@@ -296,7 +299,14 @@ public class SeahorseAgentKernelChatAutoConfiguration {
                 .runContextSnapshotRepository(runContextSnapshotRepository.getIfAvailable())
                 .runProfilePort(runProfilePort.getIfAvailable())
                 .agentRunMetadataContributors(agentRunMetadataContributors.orderedStream().toList())
+                .skillMatchPolicy(skillMatchPolicy)
                 .build();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public SkillMatchPolicy seahorseSkillMatchPolicy(SkillMatchProperties skillMatchProperties) {
+        return skillMatchProperties.toPolicy();
     }
 
     @Bean

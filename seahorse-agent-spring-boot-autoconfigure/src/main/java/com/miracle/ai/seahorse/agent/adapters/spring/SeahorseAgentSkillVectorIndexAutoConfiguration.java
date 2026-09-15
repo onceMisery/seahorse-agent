@@ -20,6 +20,7 @@ package com.miracle.ai.seahorse.agent.adapters.spring;
 import com.miracle.ai.seahorse.agent.adapters.ai.openai.EmbeddingPortAdapter;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.skill.SkillVectorIndexService;
 import com.miracle.ai.seahorse.agent.kernel.application.chat.SkillSemanticMatcher;
+import com.miracle.ai.seahorse.agent.kernel.policy.SkillMatchPolicy;
 import com.miracle.ai.seahorse.agent.kernel.config.EmbeddingModelDimensions;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentSkillRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.SkillVectorIndexRepositoryPort;
@@ -27,6 +28,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.embedding.EmbeddingPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.model.EmbeddingModelPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -111,10 +113,12 @@ public class SeahorseAgentSkillVectorIndexAutoConfiguration {
     public SkillSemanticMatcher skillSemanticMatcher(
             EmbeddingPort embeddingPort,
             SkillVectorIndexRepositoryPort vectorRepository,
-            AgentSkillRepositoryPort skillRepository) {
+            AgentSkillRepositoryPort skillRepository,
+            ObjectProvider<SkillMatchPolicy> skillMatchPolicy) {
 
         LOG.info("Configuring semantic skill matcher");
-        return new SkillSemanticMatcher(embeddingPort, vectorRepository, skillRepository);
+        return new SkillSemanticMatcher(embeddingPort, vectorRepository, skillRepository,
+                skillMatchPolicy.getIfAvailable(SkillMatchPolicy::defaults));
     }
 
     private static String configuredEmbeddingModel(Environment environment) {
