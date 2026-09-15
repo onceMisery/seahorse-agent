@@ -10,7 +10,9 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings 0",
     "format": "prettier --write .",
     "test": "vitest --run --pool threads --no-file-parallelism --maxWorkers 1",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen:endpoints": "node scripts/generate-backend-endpoint-manifest.mjs",
+    "check:endpoints": "node scripts/generate-backend-endpoint-manifest.mjs --check"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.4",

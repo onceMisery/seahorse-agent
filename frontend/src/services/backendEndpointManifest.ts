@@ -121,6 +121,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/a2a"
+  },
+  {
+    "method": "GET",
     "path": "/admin/ai-config"
   },
   {
@@ -265,26 +269,6 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
-    "path": "/api/agent-teams"
-  },
-  {
-    "method": "GET",
-    "path": "/api/agent-teams/{}"
-  },
-  {
-    "method": "POST",
-    "path": "/api/agent-teams"
-  },
-  {
-    "method": "POST",
-    "path": "/api/agent-teams/{}/runs"
-  },
-  {
-    "method": "GET",
-    "path": "/api/agent-team-runs/{}"
-  },
-  {
-    "method": "GET",
     "path": "/api/agent-handoffs/{}"
   },
   {
@@ -334,6 +318,18 @@ export const backendEndpointManifest = [
   {
     "method": "GET",
     "path": "/api/agent-runs/{}/workflow"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent-team-runs/{}"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent-teams"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent-teams/{}"
   },
   {
     "method": "GET",
@@ -1185,6 +1181,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/a2a"
+  },
+  {
+    "method": "POST",
     "path": "/admin/ai-config"
   },
   {
@@ -1269,6 +1269,10 @@ export const backendEndpointManifest = [
   },
   {
     "method": "POST",
+    "path": "/api/agent-handoffs"
+  },
+  {
+    "method": "POST",
     "path": "/api/agent-handoffs/{}/cancel"
   },
   {
@@ -1282,6 +1286,14 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/api/agent-runs/{}/retry"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent-teams"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent-teams/{}/runs"
   },
   {
     "method": "POST",

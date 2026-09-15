@@ -17,84 +17,6 @@ const EXCLUDED_FILES = new Set([
   "serviceEndpointCoverage.test.ts"
 ]);
 
-/**
- * Paths that are intentionally not in the backend manifest.
- * These are either legacy endpoints, internal chat/conversation endpoints,
- * or endpoints served by non-controller routes.
- */
-const KNOWN_GAPS = new Set([
-  // chatService — RAG stop uses a non-standard path
-  "POST /rag/v3/stop",
-  // chatService — conversation message feedback
-  "POST /conversations/messages/{}/feedback",
-  // authService — auth endpoints (served by Sa-Token adapter, not REST controller)
-  "POST /auth/login",
-  "POST /auth/logout",
-  "GET /user/me",
-  // userService — user management (non-/api/ prefix legacy paths)
-  "GET /users",
-  "POST /users",
-  "PUT /users/{}",
-  "DELETE /users/{}",
-  "PUT /user/password",
-  // sessionService — conversation endpoints (non-/api/ prefix)
-  "POST /conversations",
-  "GET /conversations",
-  "DELETE /conversations/{}",
-  "PUT /conversations/{}",
-  "GET /conversations/{}/messages",
-  "GET /conversations/{}/messages/tree",
-  "POST /conversations/{}/messages/branch/switch",
-  "POST /conversations/{}/messages/fork",
-  // sampleQuestionService — legacy non-/api/ path
-  "GET /rag/sample-questions",
-  "GET /sample-questions",
-  "POST /sample-questions",
-  "PUT /sample-questions/{}",
-  "DELETE /sample-questions/{}",
-  // queryTermMappingService — legacy non-/api/ path
-  "GET /mappings",
-  "POST /mappings",
-  "PUT /mappings/{}",
-  "DELETE /mappings/{}",
-  // intentTreeService — legacy non-/api/ path
-  "GET /intent-tree/trees",
-  "POST /intent-tree",
-  "PUT /intent-tree/{}",
-  "DELETE /intent-tree/{}",
-  "POST /intent-tree/batch/enable",
-  "POST /intent-tree/batch/disable",
-  "POST /intent-tree/batch/delete",
-  // ingestionService — legacy non-/api/ path
-  "GET /ingestion/pipelines",
-  "GET /ingestion/pipelines/{}",
-  "GET /ingestion/pipelines/{}/gate-result",
-  "POST /ingestion/pipelines",
-  "PUT /ingestion/pipelines/{}",
-  "DELETE /ingestion/pipelines/{}",
-  "GET /ingestion/tasks",
-  "GET /ingestion/tasks/{}",
-  "GET /ingestion/tasks/{}/nodes",
-  "POST /ingestion/tasks",
-  "POST /ingestion/tasks/upload",
-  // ragTraceService — legacy non-/api/ path
-  "GET /rag/traces/runs",
-  "GET /rag/traces/runs/{}",
-  "GET /rag/traces/runs/{}/nodes",
-  // settingsService — RAG settings (non-/api/ prefix)
-  "GET /rag/settings",
-  // dashboardService — admin dashboard (non-/api/ prefix)
-  "GET /admin/dashboard/overview",
-  "GET /admin/dashboard/performance",
-  "GET /admin/dashboard/trends",
-  // aiConfigService — admin AI config (non-/api/ prefix)
-  "GET /admin/ai-config",
-  "GET /admin/ai-config/{}/gate-result",
-  "PUT /admin/ai-config/{}",
-  "POST /admin/ai-config",
-  "DELETE /admin/ai-config/{}"
-]);
-
 function normalizePath(raw: string): string {
   return raw
     .replace(/\?.*$/, "")  // strip query parameters
@@ -162,7 +84,7 @@ describe("service endpoint coverage", () => {
       for (const ep of endpoints) {
         totalEndpoints++;
         const key = `${ep.method} ${ep.path}`;
-        if (!manifestSet.has(key) && !KNOWN_GAPS.has(key)) {
+        if (!manifestSet.has(key)) {
           missing.push(`${file}: ${key}`);
         }
       }
@@ -170,7 +92,7 @@ describe("service endpoint coverage", () => {
 
     // Log stats for visibility
     console.log(`[service-endpoint-coverage] Scanned ${files.length} service files, found ${totalEndpoints} endpoints`);
-    console.log(`[service-endpoint-coverage] Manifest has ${manifestSet.size} entries, known gaps: ${KNOWN_GAPS.size}`);
+    console.log(`[service-endpoint-coverage] Manifest has ${manifestSet.size} entries`);
 
     if (missing.length > 0) {
       console.warn("[service-endpoint-coverage] Missing from manifest:\n" + missing.join("\n"));
