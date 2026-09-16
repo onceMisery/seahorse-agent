@@ -1,0 +1,38 @@
+{
+  "description": "AgentLoop 基准用例集。goal 带编号/顺序标记时会被确定性规划器分解；workTurns 是脚本桩在给出最终答案前要产出的工具轮次数，workTurns + 1 > maxSteps 的用例注定被截断。",
+  "cases": [
+    {"caseId": "short-01", "goal": "查询北京今天的天气", "maxSteps": 6, "workTurns": 1},
+    {"caseId": "short-02", "goal": "1. 检索 Spring Boot 3 的新特性 2. 总结成三条要点", "maxSteps": 6, "workTurns": 1},
+    {"caseId": "short-03", "goal": "把这段文本翻译成英文", "maxSteps": 6, "workTurns": 2},
+    {"caseId": "short-04", "goal": "第一步，查一下 Redis 的过期策略；第二步，给出配置建议", "maxSteps": 6, "workTurns": 2},
+    {"caseId": "short-05", "goal": "解释什么是六边形架构", "maxSteps": 6, "workTurns": 1},
+    {"caseId": "short-06", "goal": "1. 统计本月的订单量 2. 输出环比变化", "maxSteps": 6, "workTurns": 2},
+    {"caseId": "short-07", "goal": "帮我看看这段日志里的异常原因", "maxSteps": 6, "workTurns": 1},
+    {"caseId": "short-08", "goal": "对比 Kafka 与 RabbitMQ 的适用场景", "maxSteps": 6, "workTurns": 2},
+    {"caseId": "short-09", "goal": "1. 找到用户反馈里的高频问题 2. 归类列出", "maxSteps": 6, "workTurns": 2},
+    {"caseId": "short-10", "goal": "生成一个接口文档模板", "maxSteps": 6, "workTurns": 1},
+    {"caseId": "short-11", "goal": "检查这段代码有没有空指针风险", "maxSteps": 6, "workTurns": 1},
+    {"caseId": "short-12", "goal": "1. 检索最近一周的发布记录 2. 标出回滚项", "maxSteps": 6, "workTurns": 2},
+
+    {"caseId": "long-01", "goal": "1. 收集 Redis 与 Memcached 的对比资料 2. 撰写一份选型报告", "maxSteps": 3, "workTurns": 5},
+    {"caseId": "long-02", "goal": "第一步调研竞品定价，第二步整理成对比表，第三步给出定价建议", "maxSteps": 3, "workTurns": 5},
+    {"caseId": "long-03", "goal": "1. 梳理过去三个季度的故障 2. 归纳根因 3. 提出改进项", "maxSteps": 3, "workTurns": 6},
+    {"caseId": "long-04", "goal": "调研云原生可观测性方案并输出落地路线图", "maxSteps": 3, "workTurns": 5},
+    {"caseId": "long-05", "goal": "1. 检索 Agent 框架评测基准 2. 跑通对比 3. 写结论", "maxSteps": 3, "workTurns": 6},
+    {"caseId": "long-06", "goal": "先盘点现有接口，再列出重构优先级，最后给出排期", "maxSteps": 3, "workTurns": 5},
+    {"caseId": "long-07", "goal": "1. 收集用户访谈记录 2. 提炼痛点 3. 形成需求清单", "maxSteps": 3, "workTurns": 7},
+    {"caseId": "long-08", "goal": "分析近半年成本构成并给出优化建议", "maxSteps": 3, "workTurns": 5},
+    {"caseId": "long-09", "goal": "1. 检索向量数据库选型资料 2. 压测对比 3. 输出选型结论", "maxSteps": 3, "workTurns": 6},
+    {"caseId": "long-10", "goal": "梳理数据合规要求，映射到现有系统，列出整改项", "maxSteps": 3, "workTurns": 5},
+    {"caseId": "long-11", "goal": "1. 汇总线上告警 2. 定位噪声来源 3. 调整告警规则", "maxSteps": 3, "workTurns": 7},
+    {"caseId": "long-12", "goal": "调研前端性能瓶颈，提出优化方案并估算收益", "maxSteps": 3, "workTurns": 5},
+    {"caseId": "long-13", "goal": "1. 盘点测试用例覆盖 2. 找出缺口 3. 补充计划", "maxSteps": 3, "workTurns": 6},
+    {"caseId": "long-14", "goal": "先梳理权限模型，再给出最小权限改造方案", "maxSteps": 3, "workTurns": 5},
+    {"caseId": "long-15", "goal": "1. 检索多租户隔离方案 2. 对比成本 3. 给出推荐", "maxSteps": 3, "workTurns": 8},
+    {"caseId": "long-16", "goal": "分析模型调用成本，找出可缓存的部分，估算节省额", "maxSteps": 3, "workTurns": 5},
+    {"caseId": "long-17", "goal": "1. 汇总文档缺口 2. 排优先级 3. 分工补写", "maxSteps": 3, "workTurns": 6},
+    {"caseId": "long-18", "goal": "调研灰度发布策略，结合现状给出落地步骤", "maxSteps": 3, "workTurns": 5},
+    {"caseId": "long-19", "goal": "1. 检索知识库召回效果数据 2. 定位 badcase 3. 提出调参建议", "maxSteps": 3, "workTurns": 7},
+    {"caseId": "long-20", "goal": "梳理历史技术债，评估偿还成本，排出季度计划", "maxSteps": 3, "workTurns": 6}
+  ]
+}

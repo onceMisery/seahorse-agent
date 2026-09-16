@@ -1,0 +1,6 @@
+{
+  "description": "AgentLoop 基准用例索引。sets 列出要加载的用例文件，新增一个文件不需要改任何 Java 代码。",
+  "sets": [
+    "regression.json"
+  ]
+}
