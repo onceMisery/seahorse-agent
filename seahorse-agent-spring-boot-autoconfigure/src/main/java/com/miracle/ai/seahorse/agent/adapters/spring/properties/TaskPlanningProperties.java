@@ -21,7 +21,10 @@ import com.miracle.ai.seahorse.agent.kernel.policy.TaskPlanningPolicy;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 任务规划策略配置（前缀 {@code seahorse-agent.task-planning}）。
@@ -51,6 +54,15 @@ public class TaskPlanningProperties {
     private List<String> parallelMarkers;
     /** 并行标记词（拉丁），覆盖内核默认值。 */
     private List<String> parallelMarkersLatin;
+    /**
+     * 规划器选择：{@code heuristic}（默认，确定性切分）或
+     * {@code llm-with-heuristic-fallback}（模型改写目标后再确定性解析，失败自动回退）。
+     */
+    private String plannerMode;
+    /** LLM 规划的等待上限，默认 30s；超时即回退到确定性切分。 */
+    private Duration plannerTimeout;
+    /** 自定义规划提示词模板，必须包含 {@code {goal}} 占位符。 */
+    private String plannerPrompt;
 
     public Boolean getEnabled() {
         return enabled;
@@ -116,6 +128,30 @@ public class TaskPlanningProperties {
         this.parallelMarkersLatin = parallelMarkersLatin;
     }
 
+    public String getPlannerMode() {
+        return plannerMode;
+    }
+
+    public void setPlannerMode(String plannerMode) {
+        this.plannerMode = plannerMode;
+    }
+
+    public Duration getPlannerTimeout() {
+        return plannerTimeout;
+    }
+
+    public void setPlannerTimeout(Duration plannerTimeout) {
+        this.plannerTimeout = plannerTimeout;
+    }
+
+    public String getPlannerPrompt() {
+        return plannerPrompt;
+    }
+
+    public void setPlannerPrompt(String plannerPrompt) {
+        this.plannerPrompt = plannerPrompt;
+    }
+
     public TaskPlanningPolicy toPolicy() {
         TaskPlanningPolicy.Builder builder = TaskPlanningPolicy.builder();
         if (enabled != null) {
@@ -142,6 +178,30 @@ public class TaskPlanningProperties {
         if (parallelMarkersLatin != null) {
             builder.parallelMarkersLatin(parallelMarkersLatin);
         }
+        if (plannerMode != null) {
+            builder.plannerMode(parsePlannerMode(plannerMode));
+        }
+        if (plannerTimeout != null) {
+            builder.plannerTimeout(plannerTimeout);
+        }
+        if (plannerPrompt != null) {
+            builder.plannerPrompt(plannerPrompt);
+        }
         return builder.build();
+    }
+
+    /**
+     * 兼容 kebab-case（{@code llm-with-heuristic-fallback}）、枚举原名与大小写混写。
+     * 非法值直接抛错——规划器选错只会静默降低规划质量，不如在启动时暴露。
+     */
+    private static TaskPlanningPolicy.PlannerMode parsePlannerMode(String raw) {
+        String normalized = raw.trim().replace('-', '_').toUpperCase(Locale.ROOT);
+        try {
+            return TaskPlanningPolicy.PlannerMode.valueOf(normalized);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(
+                    "seahorse-agent.task-planning.planner-mode 非法：" + raw
+                            + "，可选值：" + Arrays.toString(TaskPlanningPolicy.PlannerMode.values()), ex);
+        }
     }
 }

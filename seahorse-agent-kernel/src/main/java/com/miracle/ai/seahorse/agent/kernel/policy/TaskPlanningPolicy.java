@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.policy;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
@@ -32,6 +33,28 @@ import java.util.Objects;
  * <p>中文标记按原文匹配，拉丁标记按小写后的文本匹配，因此两组分开存放。
  */
 public final class TaskPlanningPolicy {
+
+    /**
+     * 规划器的选择。
+     */
+    public enum PlannerMode {
+        /** 确定性切分：不调用模型，行为可预测、无额外延迟。 */
+        HEURISTIC,
+        /**
+         * 先让模型把目标改写成编号步骤，再用确定性切分解析模型输出；
+         * 模型不可用、超时或输出无法解析时自动回退到 {@link #HEURISTIC}。
+         */
+        LLM_WITH_HEURISTIC_FALLBACK
+    }
+
+    private static final String DEFAULT_PLANNER_PROMPT = """
+            你是一个任务规划器。把用户的目标拆分成可依次执行的具体步骤。
+            只输出一个编号列表，每行一步，不要有任何解释、标题或前后缀。
+            步骤数量控制在 2 到 {maxSteps} 步之间。
+
+            目标：
+            {goal}
+            """;
 
     // 只收多字标记：单字的"先""再"会命中"优先""再来"等普通用词，误切代价高于收益。
     // "先…然后…最后"这类目标仍能被正确切分——前置的"先"只是留在第一段里，不影响步骤数。
@@ -53,6 +76,9 @@ public final class TaskPlanningPolicy {
     private final List<String> sequentialMarkersLatin;
     private final List<String> parallelMarkers;
     private final List<String> parallelMarkersLatin;
+    private final PlannerMode plannerMode;
+    private final Duration plannerTimeout;
+    private final String plannerPrompt;
 
     private TaskPlanningPolicy(Builder b) {
         this.enabled = b.enabled;
@@ -63,6 +89,12 @@ public final class TaskPlanningPolicy {
         this.sequentialMarkersLatin = copyOf(b.sequentialMarkersLatin, "sequentialMarkersLatin");
         this.parallelMarkers = copyOf(b.parallelMarkers, "parallelMarkers");
         this.parallelMarkersLatin = copyOf(b.parallelMarkersLatin, "parallelMarkersLatin");
+        this.plannerMode = Objects.requireNonNull(b.plannerMode, "plannerMode must not be null");
+        this.plannerTimeout = requirePositive(b.plannerTimeout, "plannerTimeout");
+        this.plannerPrompt = Objects.requireNonNull(b.plannerPrompt, "plannerPrompt must not be null");
+        if (!plannerPrompt.contains(GOAL_PLACEHOLDER)) {
+            throw new IllegalArgumentException("plannerPrompt 必须包含 " + GOAL_PLACEHOLDER + " 占位符");
+        }
     }
 
     public boolean enabled() {
@@ -97,6 +129,33 @@ public final class TaskPlanningPolicy {
         return parallelMarkersLatin;
     }
 
+    public PlannerMode plannerMode() {
+        return plannerMode;
+    }
+
+    public Duration plannerTimeout() {
+        return plannerTimeout;
+    }
+
+    /**
+     * @return 规划提示词模板，含 {@code {goal}} 与可选的 {@code {maxSteps}} 占位符
+     */
+    public String plannerPrompt() {
+        return plannerPrompt;
+    }
+
+    /**
+     * 用目标与步数上限渲染提示词。
+     */
+    public String renderPlannerPrompt(String goal, int maxSteps) {
+        return plannerPrompt
+                .replace(GOAL_PLACEHOLDER, Objects.requireNonNullElse(goal, ""))
+                .replace(MAX_STEPS_PLACEHOLDER, String.valueOf(Math.max(2, maxSteps)));
+    }
+
+    public static final String GOAL_PLACEHOLDER = "{goal}";
+    public static final String MAX_STEPS_PLACEHOLDER = "{maxSteps}";
+
     public static TaskPlanningPolicy defaults() {
         return builder().build();
     }
@@ -116,6 +175,14 @@ public final class TaskPlanningPolicy {
         return value;
     }
 
+    private static Duration requirePositive(Duration value, String name) {
+        Objects.requireNonNull(value, name + " must not be null");
+        if (value.isZero() || value.isNegative()) {
+            throw new IllegalArgumentException(name + " 必须 > 0");
+        }
+        return value;
+    }
+
     private static List<String> copyOf(List<String> values, String name) {
         return List.copyOf(Objects.requireNonNull(values, name + " must not be null"));
     }
@@ -129,6 +196,9 @@ public final class TaskPlanningPolicy {
         private List<String> sequentialMarkersLatin = DEFAULT_SEQUENTIAL_MARKERS_LATIN;
         private List<String> parallelMarkers = DEFAULT_PARALLEL_MARKERS;
         private List<String> parallelMarkersLatin = DEFAULT_PARALLEL_MARKERS_LATIN;
+        private PlannerMode plannerMode = PlannerMode.HEURISTIC;
+        private Duration plannerTimeout = Duration.ofSeconds(30);
+        private String plannerPrompt = DEFAULT_PLANNER_PROMPT;
 
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
@@ -167,6 +237,21 @@ public final class TaskPlanningPolicy {
 
         public Builder parallelMarkersLatin(List<String> parallelMarkersLatin) {
             this.parallelMarkersLatin = parallelMarkersLatin;
+            return this;
+        }
+
+        public Builder plannerMode(PlannerMode plannerMode) {
+            this.plannerMode = plannerMode;
+            return this;
+        }
+
+        public Builder plannerTimeout(Duration plannerTimeout) {
+            this.plannerTimeout = plannerTimeout;
+            return this;
+        }
+
+        public Builder plannerPrompt(String plannerPrompt) {
+            this.plannerPrompt = plannerPrompt;
             return this;
         }
 

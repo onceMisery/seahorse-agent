@@ -26,9 +26,13 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.plan.PlanStepStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.plan.TaskPlan;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatMessage;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRole;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatSamplingOptions;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCallback;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.StreamCancellationHandle;
 import com.miracle.ai.seahorse.agent.kernel.policy.TaskPlanningPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.TaskPlannerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -206,6 +210,41 @@ class AgentLoopPlannerTests {
         assertEquals(2, plan.stepCount());
     }
 
+    @Test
+    void shouldUseLlmPlannerWhenModeIsLlmAndModelPortIsAvailable() {
+        AgentLoopPlanner planner = new AgentLoopPlanner(
+                TaskPlanningPolicy.builder()
+                        .enabled(true)
+                        .plannerMode(TaskPlanningPolicy.PlannerMode.LLM_WITH_HEURISTIC_FALLBACK)
+                        .build(),
+                null,
+                new RecordingRecorder(),
+                null,
+                new ScriptedModel("1. 收集 Redis 资料\n2. 撰写对比报告"));
+
+        TaskPlan plan = planner.planRun(request(), null, 3);
+
+        assertNotNull(plan);
+        assertEquals("llm-decomposition", plan.strategy());
+        assertEquals(2, plan.stepCount());
+    }
+
+    @Test
+    void shouldDegradeToHeuristicWhenLlmModeIsSetButModelPortIsMissing() {
+        AgentLoopPlanner planner = new AgentLoopPlanner(
+                TaskPlanningPolicy.builder()
+                        .enabled(true)
+                        .plannerMode(TaskPlanningPolicy.PlannerMode.LLM_WITH_HEURISTIC_FALLBACK)
+                        .build(),
+                null,
+                new RecordingRecorder());
+
+        TaskPlan plan = planner.planRun(request(), null, 3);
+
+        assertNotNull(plan);
+        assertEquals("heuristic-decomposition", plan.strategy(), "没有模型端口时必须静默降级，而不是让规划失败");
+    }
+
     private static AgentLoopRequest request() {
         return AgentLoopRequest.builder()
                 .question(GOAL)
@@ -214,6 +253,24 @@ class AgentLoopPlannerTests {
                 .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
                 .maxSteps(3)
                 .build();
+    }
+
+    /** 按脚本返回一次固定文本的模型桩，用于验证规划器的选择结果。 */
+    private static final class ScriptedModel implements StreamingChatModelPort {
+
+        private final String reply;
+
+        private ScriptedModel(String reply) {
+            this.reply = reply;
+        }
+
+        @Override
+        public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {
+            callback.onContent(reply);
+            callback.onComplete();
+            return () -> {
+            };
+        }
     }
 
     private static final class RecordingRecorder implements AgentRunStepRecorder {

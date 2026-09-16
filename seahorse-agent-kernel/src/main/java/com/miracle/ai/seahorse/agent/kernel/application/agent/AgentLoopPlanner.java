@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.kernel.application.agent;
 
 import com.miracle.ai.seahorse.agent.kernel.application.agent.plan.DefaultTaskPlanner;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.plan.LlmTaskPlanner;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.AgentLoopRequest;
@@ -30,6 +31,7 @@ import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceNodeStartCommand;
 import com.miracle.ai.seahorse.agent.kernel.domain.trace.TraceRunScope;
 import com.miracle.ai.seahorse.agent.kernel.policy.TaskPlanningPolicy;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.TaskPlannerPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.StreamingChatModelPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,21 +67,38 @@ class AgentLoopPlanner {
     AgentLoopPlanner(TaskPlanningPolicy policy,
                      KernelRagTraceRecorder traceRecorder,
                      AgentRunStepRecorder runStepRecorder) {
-        this(policy, traceRecorder, runStepRecorder, null);
+        this(policy, traceRecorder, runStepRecorder, null, null);
     }
 
-    /**
-     * @param planner 显式指定规划器，为 {@code null} 时使用内核默认的确定性规划器。
-     *                仅测试与后续接入 LLM 规划器时使用。
-     */
     AgentLoopPlanner(TaskPlanningPolicy policy,
                      KernelRagTraceRecorder traceRecorder,
                      AgentRunStepRecorder runStepRecorder,
                      TaskPlannerPort planner) {
+        this(policy, traceRecorder, runStepRecorder, planner, null);
+    }
+
+    /**
+     * @param planner   显式指定规划器，为 {@code null} 时按策略选择（见 {@link #selectPlanner}）
+     * @param modelPort LLM 规划器所需的模型端口，为 {@code null} 时 LLM 模式自动降级为确定性规划
+     */
+    AgentLoopPlanner(TaskPlanningPolicy policy,
+                     KernelRagTraceRecorder traceRecorder,
+                     AgentRunStepRecorder runStepRecorder,
+                     TaskPlannerPort planner,
+                     StreamingChatModelPort modelPort) {
         this.policy = Objects.requireNonNullElseGet(policy, TaskPlanningPolicy::defaults);
         this.traceRecorder = Objects.requireNonNullElseGet(traceRecorder, KernelRagTraceRecorder::noop);
         this.runStepRecorder = Objects.requireNonNullElseGet(runStepRecorder, AgentRunStepRecorder::noop);
-        this.planner = planner != null ? planner : new DefaultTaskPlanner(this.policy);
+        this.planner = planner != null ? planner : selectPlanner(this.policy, modelPort);
+    }
+
+    private static TaskPlannerPort selectPlanner(TaskPlanningPolicy policy,
+                                                 StreamingChatModelPort modelPort) {
+        if (policy.plannerMode() == TaskPlanningPolicy.PlannerMode.LLM_WITH_HEURISTIC_FALLBACK
+                && modelPort != null) {
+            return new LlmTaskPlanner(modelPort, policy);
+        }
+        return new DefaultTaskPlanner(policy);
     }
 
     /**
@@ -97,7 +116,8 @@ class AgentLoopPlanner {
                     request.agentId(),
                     request.tenantId(),
                     request.userId(),
-                    maxSteps));
+                    maxSteps,
+                    request.modelId()));
             if (plan == null || plan.stepCount() == 0) {
                 traceRecorder.finishNode(planScope);
                 return null;

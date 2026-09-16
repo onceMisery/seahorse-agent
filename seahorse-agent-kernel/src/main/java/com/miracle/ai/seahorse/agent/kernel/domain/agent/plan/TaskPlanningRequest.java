@@ -31,6 +31,7 @@ import java.util.Objects;
  * @param tenantId 租户标识
  * @param userId   用户标识
  * @param maxSteps 步数上限，{@code <= 0} 表示由策略决定
+ * @param modelId  规划所用模型；为 {@code null} 时由模型适配器决定（LLM 规划器需要）
  */
 public record TaskPlanningRequest(
         String goal,
@@ -38,14 +39,20 @@ public record TaskPlanningRequest(
         String agentId,
         String tenantId,
         String userId,
-        int maxSteps) {
+        int maxSteps,
+        String modelId) {
 
     public TaskPlanningRequest {
         goal = Objects.requireNonNullElse(goal, "");
         maxSteps = Math.max(0, maxSteps);
+        modelId = modelId == null || modelId.isBlank() ? null : modelId.trim();
     }
 
     public static TaskPlanningRequest of(String goal, String runId, int maxSteps) {
-        return new TaskPlanningRequest(goal, runId, null, null, null, maxSteps);
+        return of(goal, runId, maxSteps, null);
+    }
+
+    public static TaskPlanningRequest of(String goal, String runId, int maxSteps, String modelId) {
+        return new TaskPlanningRequest(goal, runId, null, null, null, maxSteps, modelId);
     }
 }

@@ -159,7 +159,8 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                 deps.modelContextWindow(), this.options.contextEnvelope(), deps.contextCalibrationCache());
         this.toolExecutor = new AgentLoopToolExecutor(options, toolGateway, traceRecorder, runStepRecorder,
                 modelTurns);
-        this.planner = new AgentLoopPlanner(options.taskPlanning(), traceRecorder, runStepRecorder);
+        this.planner = new AgentLoopPlanner(options.taskPlanning(), traceRecorder, runStepRecorder,
+                null, modelPort);
     }
 
     public AgentLoopResult execute(AgentLoopRequest request) {

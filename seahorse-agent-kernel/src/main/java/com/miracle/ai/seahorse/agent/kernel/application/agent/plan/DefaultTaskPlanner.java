@@ -74,7 +74,7 @@ public final class DefaultTaskPlanner implements TaskPlannerPort {
     @Override
     public TaskPlan plan(TaskPlanningRequest request) {
         TaskPlanningRequest safe = request == null
-                ? new TaskPlanningRequest("", null, null, null, null, 0)
+                ? TaskPlanningRequest.of("", null, 0)
                 : request;
         String goal = safe.goal() == null ? "" : safe.goal().trim();
         if (goal.isEmpty()) {
