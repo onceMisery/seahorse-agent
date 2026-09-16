@@ -43,6 +43,13 @@ public class RepositoryAgentRunStepRecorder implements AgentRunStepRecorder {
     private final AgentRunRepositoryPort runRepository;
     private final Clock clock;
     private final ObjectMapper objectMapper;
+    /**
+     * 步骤序号是"读当前条数 + 1"的 read-modify-write，本身不原子。
+     * 今天所有记账都在主线程串行发生，看不出问题；一旦并行度调大或记账下移到 worker 线程，
+     * 两个线程会拿到同一个序号。这里把"算序号 + 落库"锁成一步，
+     * 代价是记账串行（本来就是串行），换来序号唯一。
+     */
+    private final Object stepSequenceLock = new Object();
 
     public RepositoryAgentRunStepRecorder(AgentRunRepositoryPort runRepository, Clock clock) {
         this(runRepository, clock, new ObjectMapper());
@@ -62,18 +69,20 @@ public class RepositoryAgentRunStepRecorder implements AgentRunStepRecorder {
             return;
         }
         Instant now = clock.instant();
-        runRepository.appendStep(new AgentStep(
-                nextStepId(),
-                runId,
-                nextStepNo(runId),
-                AgentStepType.MODEL_TURN,
-                error == null ? AgentStepStatus.SUCCEEDED : AgentStepStatus.FAILED,
-                safeJsonText(inputJson),
-                safeJsonText(outputJson),
-                error == null ? null : AgentRuntimeConstants.AGENT_STEP_FAILURE_CODE,
-                error == null ? null : ModelFailureSanitizer.safeMessage(error),
-                now,
-                now));
+        synchronized (stepSequenceLock) {
+            runRepository.appendStep(new AgentStep(
+                    nextStepId(),
+                    runId,
+                    nextStepNo(runId),
+                    AgentStepType.MODEL_TURN,
+                    error == null ? AgentStepStatus.SUCCEEDED : AgentStepStatus.FAILED,
+                    safeJsonText(inputJson),
+                    safeJsonText(outputJson),
+                    error == null ? null : AgentRuntimeConstants.AGENT_STEP_FAILURE_CODE,
+                    error == null ? null : ModelFailureSanitizer.safeMessage(error),
+                    now,
+                    now));
+        }
     }
 
     @Override
@@ -83,18 +92,20 @@ public class RepositoryAgentRunStepRecorder implements AgentRunStepRecorder {
         }
         boolean succeeded = observation != null && observation.success();
         Instant now = clock.instant();
-        runRepository.appendStep(new AgentStep(
-                nextStepId(),
-                runId,
-                nextStepNo(runId),
-                AgentStepType.TOOL_CALL,
-                succeeded ? AgentStepStatus.SUCCEEDED : AgentStepStatus.FAILED,
-                safeJsonText(toolCallJson(toolCall)),
-                safeJsonText(observationJson(observation)),
-                succeeded ? null : AgentRuntimeConstants.AGENT_STEP_FAILURE_CODE,
-                succeeded ? null : safeText(observationError(observation)),
-                now,
-                now));
+        synchronized (stepSequenceLock) {
+            runRepository.appendStep(new AgentStep(
+                    nextStepId(),
+                    runId,
+                    nextStepNo(runId),
+                    AgentStepType.TOOL_CALL,
+                    succeeded ? AgentStepStatus.SUCCEEDED : AgentStepStatus.FAILED,
+                    safeJsonText(toolCallJson(toolCall)),
+                    safeJsonText(observationJson(observation)),
+                    succeeded ? null : AgentRuntimeConstants.AGENT_STEP_FAILURE_CODE,
+                    succeeded ? null : safeText(observationError(observation)),
+                    now,
+                    now));
+        }
     }
 
     private int nextStepNo(String runId) {

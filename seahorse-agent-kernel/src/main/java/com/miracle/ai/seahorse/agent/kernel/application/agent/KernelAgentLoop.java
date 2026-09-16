@@ -468,8 +468,13 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
      * 并发发起一个波次内所有步骤的模型轮次，再合并成一个聚合轮次交给后续的工具执行。
      *
      * <p>合并之后，主循环看到的仍然只是"一个轮次"，因此工具执行、观察回灌、审批等待、
-     * 取消与降级这些既有路径都不需要为并行单独分支。代价是这一波只产生一条模型 trace 节点
-     * （各步骤的节点会被并发写坏），排障粒度到"波次"为止——在并行度默认关闭的前提下可以接受。
+     * 取消与降级这些既有路径都不需要为并行单独分支。代价是这一波只产生一条模型 trace 节点，
+     * 排障粒度到"波次"为止——在并行度默认关闭的前提下可以接受。
+     *
+     * <p>注：早期注释曾写"各步骤的节点会被并发写坏"，经核对已不成立——
+     * {@code KernelRagTraceRecorder} 只有 final 字段、无 ThreadLocal 也无节点栈，
+     * {@code TraceNodeScope} 是不可变 record，仓储实现（JdbcTemplate）同样无状态。
+     * 合并成一条节点是刻意的"排障粒度"取舍，不是并发安全的权宜之计。
      */
     private ModelTurn requestWaveTurns(AgentLoopRequest request,
                                        List<ChatMessage> messages,

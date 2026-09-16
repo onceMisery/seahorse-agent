@@ -37,6 +37,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
@@ -128,14 +129,18 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         private final ConversationMemoryPort memoryPort;
         private final AgentRunEventBufferPort eventBufferPort;
         private final ObjectProvider<TaskInboundPort> taskPortProvider;
-        private final StringBuilder answer = new StringBuilder();
-        private final StringBuilder thinking = new StringBuilder();
-        private final List<PendingCustomEvent> pendingCustomEvents = new ArrayList<>();
+        // 以下状态会被多个模型流的回调线程同时触碰：并行波次下同一波内的每个步骤各起一条流，
+        // 但它们共享这一个 StreamCallback。缓冲区用 StringBuffer、其余字段用 volatile，
+        // 保证并发下不会丢写或读到过期值。内容仍可能交错（多个步骤的答案混在同一条流里），
+        // 那是产品语义问题，不是内存安全问题——本类只负责后者。
+        private final StringBuffer answer = new StringBuffer();
+        private final StringBuffer thinking = new StringBuffer();
+        private final List<PendingCustomEvent> pendingCustomEvents = Collections.synchronizedList(new ArrayList<>());
         private final AtomicLong seqCounter = new AtomicLong(0);
-        private long sentEventSeq;
-        private String currentRunId;
-        private long runStartedAtMs;
-        private boolean responseStarted;
+        private volatile long sentEventSeq;
+        private volatile String currentRunId;
+        private volatile long runStartedAtMs;
+        private volatile boolean responseStarted;
     
         private LocalChatStreamCallback(SseEmitter emitter,
                                         String conversationId,
@@ -270,13 +275,18 @@ public class LocalChatStreamCallbackFactory implements ChatStreamCallbackFactory
         }
 
         private void flushPendingCustomEvents() {
-            if (pendingCustomEvents.isEmpty()) {
-                return;
+            List<PendingCustomEvent> buffered;
+            // 同步列表的迭代必须在锁内；先换出快照再发送，避免持锁期间调用 sender。
+            synchronized (pendingCustomEvents) {
+                if (pendingCustomEvents.isEmpty()) {
+                    return;
+                }
+                buffered = new ArrayList<>(pendingCustomEvents);
+                pendingCustomEvents.clear();
             }
-            for (PendingCustomEvent event : pendingCustomEvents) {
+            for (PendingCustomEvent event : buffered) {
                 sender.sendEvent(event.eventName(), event.payload());
             }
-            pendingCustomEvents.clear();
         }
 
         private void emitEnveloped(StreamEventType eventType, Object payload) {

@@ -59,6 +59,8 @@ final class AgentLoopToolExecutor {
     private static final String TOOL_OBSERVATION_TRUNCATED_SUFFIX = "...[truncated]";
     private static final String RAW_ARGUMENTS_KEY = "_raw";
     private static final String LEGACY_LOAD_SKILL_TOOL_ID = "load_skill";
+    private static final String INTERRUPTED_MESSAGE = "Tool execution was interrupted";
+    private static final String CANCELLED_MESSAGE = "Tool execution was cancelled";
     private static final String TRACE_TYPE_AGENT_TOOL = "AGENT_TOOL";
     private static final String TRACE_CLASS_NAME =
             "com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop";
@@ -102,6 +104,13 @@ final class AgentLoopToolExecutor {
         int parallelism = Math.min(options.maxParallelTools(), toolCalls.size());
         List<AgentObservation> observations = new ArrayList<>(toolCalls.size());
         for (int start = 0; start < toolCalls.size(); start += parallelism) {
+            // 取消后不能再起新批次。AgentRunControl 会把已注册的线程池立刻 shutdownNow，
+            // 于是 invokeAll 在 execute 阶段就抛 RejectedExecutionException——
+            // 结果是"用户取消"被伪装成"工具执行失败"，还会多跑一批本不必跑的工具。
+            if (isCancelled(control)) {
+                markRemaining(toolCalls, observations, CANCELLED_MESSAGE);
+                break;
+            }
             int end = Math.min(start + parallelism, toolCalls.size());
             observations.addAll(executeToolBatch(
                     toolCalls.subList(start, end),
@@ -113,14 +122,28 @@ final class AgentLoopToolExecutor {
                     traceRunScope,
                     stepScope,
                     events));
+            if (isCancelled(control) && observations.size() < toolCalls.size()) {
+                markRemaining(toolCalls, observations, CANCELLED_MESSAGE);
+                break;
+            }
             if (Thread.currentThread().isInterrupted() && observations.size() < toolCalls.size()) {
-                for (int i = observations.size(); i < toolCalls.size(); i++) {
-                    observations.add(AgentObservation.failed(toolCalls.get(i).id(), "Tool execution was interrupted"));
-                }
+                markRemaining(toolCalls, observations, INTERRUPTED_MESSAGE);
                 break;
             }
         }
         return observations;
+    }
+
+    private static boolean isCancelled(AgentRunControl control) {
+        return control != null && control.cancelled();
+    }
+
+    private static void markRemaining(List<AgentToolCall> toolCalls,
+                                      List<AgentObservation> observations,
+                                      String message) {
+        for (int i = observations.size(); i < toolCalls.size(); i++) {
+            observations.add(AgentObservation.failed(toolCalls.get(i).id(), message));
+        }
     }
 
     ToolInvocationRequest toolInvocationRequest(
@@ -215,7 +238,7 @@ final class AgentLoopToolExecutor {
             return future.get();
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            return AgentObservation.failed(toolCall.id(), "Tool execution was interrupted");
+            return AgentObservation.failed(toolCall.id(), INTERRUPTED_MESSAGE);
         } catch (ExecutionException ex) {
             Throwable cause = Objects.requireNonNullElse(ex.getCause(), ex);
             return AgentObservation.failed(toolCall.id(),
