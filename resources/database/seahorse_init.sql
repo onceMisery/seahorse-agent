@@ -1595,6 +1595,40 @@ CREATE INDEX IF NOT EXISTS idx_sa_approval_request_status
 CREATE INDEX IF NOT EXISTS idx_sa_approval_request_run
   ON sa_approval_request(run_id, step_id);
 
+-- 自学习闭环的落地工单：把策略调整建议变成可追责、可审批、可回访的对象。
+-- 独立建表而非复用 sa_approval_request：后者是 run/step 维度、与工具执行强耦合，
+-- 工单是策略配置维度，塞进同一张表只会让两边都多出一批永远为空的列。
+CREATE TABLE IF NOT EXISTS sa_policy_adjustment_ticket (
+  pk_id              BIGSERIAL PRIMARY KEY,
+  ticket_id          VARCHAR(64)  NOT NULL UNIQUE,
+  tenant_id          VARCHAR(64)  NOT NULL DEFAULT 'default',
+  target_key         VARCHAR(255) NOT NULL DEFAULT '',
+  policy_key         VARCHAR(255) NOT NULL DEFAULT '',
+  direction          VARCHAR(32)  NOT NULL,
+  suggested_delta    DOUBLE PRECISION NOT NULL DEFAULT 0,
+  disapproval_rate   DOUBLE PRECISION NOT NULL DEFAULT 0,
+  sample_count       INTEGER      NOT NULL DEFAULT 0,
+  rationale          TEXT,
+  evidence_ids       TEXT,
+  fingerprint        VARCHAR(512) NOT NULL,
+  status             VARCHAR(32)  NOT NULL,
+  created_by         VARCHAR(128),
+  created_at         TIMESTAMP    NOT NULL,
+  updated_at         TIMESTAMP    NOT NULL,
+  decided_by         VARCHAR(128),
+  decided_at         TIMESTAMP,
+  decision_comment   TEXT,
+  applied_by         VARCHAR(128),
+  applied_at         TIMESTAMP,
+  rollback_comment   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_policy_ticket_tenant_status
+  ON sa_policy_adjustment_ticket(tenant_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_policy_ticket_fingerprint
+  ON sa_policy_adjustment_ticket(tenant_id, fingerprint);
+
 CREATE INDEX IF NOT EXISTS idx_sa_approval_request_rollout
   ON sa_approval_request(tenant_id, agent_id, rollout_id, requested_at);
 

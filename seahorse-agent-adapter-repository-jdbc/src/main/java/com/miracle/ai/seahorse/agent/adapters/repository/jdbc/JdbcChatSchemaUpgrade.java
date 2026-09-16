@@ -156,6 +156,7 @@ public class JdbcChatSchemaUpgrade {
         widenColumns("t_short_term_memory", List.of("id", "user_id", "conversation_id"));
         ensureLayeredMemoryLifecycleColumns();
         ensureLearningSignalColumns();
+        ensurePolicyAdjustmentTicketTable();
     }
 
     private void ensureTaskTable() {
@@ -1049,6 +1050,43 @@ public class JdbcChatSchemaUpgrade {
         jdbcTemplate.execute("""
                 CREATE INDEX IF NOT EXISTS idx_agent_collab_policy_pair
                     ON sa_agent_collaboration_policy (tenant_id, source_agent_id, target_agent_id)
+                """);
+    }
+
+    private void ensurePolicyAdjustmentTicketTable() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_policy_adjustment_ticket (
+                    pk_id              BIGSERIAL PRIMARY KEY,
+                    ticket_id          VARCHAR(64)  NOT NULL UNIQUE,
+                    tenant_id          VARCHAR(64)  NOT NULL DEFAULT 'default',
+                    target_key         VARCHAR(255) NOT NULL DEFAULT '',
+                    policy_key         VARCHAR(255) NOT NULL DEFAULT '',
+                    direction          VARCHAR(32)  NOT NULL,
+                    suggested_delta    DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    disapproval_rate   DOUBLE PRECISION NOT NULL DEFAULT 0,
+                    sample_count       INTEGER      NOT NULL DEFAULT 0,
+                    rationale          TEXT,
+                    evidence_ids       TEXT,
+                    fingerprint        VARCHAR(512) NOT NULL,
+                    status             VARCHAR(32)  NOT NULL,
+                    created_by         VARCHAR(128),
+                    created_at         TIMESTAMP    NOT NULL,
+                    updated_at         TIMESTAMP    NOT NULL,
+                    decided_by         VARCHAR(128),
+                    decided_at         TIMESTAMP,
+                    decision_comment   TEXT,
+                    applied_by         VARCHAR(128),
+                    applied_at         TIMESTAMP,
+                    rollback_comment   TEXT
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_policy_ticket_tenant_status
+                    ON sa_policy_adjustment_ticket (tenant_id, status, created_at DESC)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_policy_ticket_fingerprint
+                    ON sa_policy_adjustment_ticket (tenant_id, fingerprint)
                 """);
     }
 

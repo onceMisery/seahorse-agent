@@ -25,6 +25,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcDashboardRepos
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcIntentTreeRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMessageFeedbackRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRepositoryAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPolicyAdjustmentTicketAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRagTraceRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRoleCardRepositoryAdapter;
@@ -37,6 +38,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationRep
 import com.miracle.ai.seahorse.agent.ports.outbound.dashboard.DashboardRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
@@ -130,6 +133,27 @@ public class SeahorseAgentOpsRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(MessageFeedbackRepositoryPort.class)
     public JdbcMessageFeedbackRepositoryAdapter seahorseJdbcMessageFeedbackRepositoryAdapter(DataSource dataSource) {
         return new JdbcMessageFeedbackRepositoryAdapter(dataSource);
+    }
+
+    /**
+     * 落地工单仓储。同时注册成写入与查询两个端口——两者是同一张表的两个方向，
+     * 拆成两个 Bean 只会让"到底有几个实现"变得难判断。
+     */
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type",
+            havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(PolicyAdjustmentTicketRepositoryPort.class)
+    public JdbcPolicyAdjustmentTicketAdapter seahorseJdbcPolicyAdjustmentTicketAdapter(DataSource dataSource) {
+        return new JdbcPolicyAdjustmentTicketAdapter(dataSource);
+    }
+
+    @Bean
+    @ConditionalOnBean(JdbcPolicyAdjustmentTicketAdapter.class)
+    @ConditionalOnMissingBean(PolicyAdjustmentTicketQueryPort.class)
+    public PolicyAdjustmentTicketQueryPort seahorsePolicyAdjustmentTicketQueryPort(
+            JdbcPolicyAdjustmentTicketAdapter adapter) {
+        return adapter;
     }
 
     @Bean

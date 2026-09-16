@@ -29,6 +29,10 @@ import com.miracle.ai.seahorse.agent.adapters.spring.properties.RoutingPropertie
 import com.miracle.ai.seahorse.agent.kernel.application.agent.routing.ModelRoutingPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.conversation.ConversationAttachmentParserService;
 import com.miracle.ai.seahorse.agent.kernel.application.learning.KernelLearningLoopService;
+import com.miracle.ai.seahorse.agent.kernel.application.learning.KernelPolicyAdjustmentTicketService;
+import com.miracle.ai.seahorse.agent.ports.inbound.learning.PolicyAdjustmentTicketManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
@@ -130,6 +134,23 @@ public class SeahorseAgentKernelEvalAutoConfiguration {
     @ConditionalOnMissingBean
     public KernelLearningLoopService seahorseKernelLearningLoopService(LearningLoopProperties properties) {
         return new KernelLearningLoopService(properties == null ? null : properties.toPolicy());
+    }
+
+    /**
+     * 落地工单（P3-2 配套）：给闭环的建议补上身份、审批与回访能力。
+     *
+     * <p>两个出站端口都用 {@code ObjectProvider} + {@code empty()} 兜底——
+     * 没有配置持久化时工单仍然能在内存里流转，只是不落库，不会让整个装配失败。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public PolicyAdjustmentTicketManagementInboundPort seahorsePolicyAdjustmentTicketService(
+            ObjectProvider<PolicyAdjustmentTicketRepositoryPort> repository,
+            ObjectProvider<PolicyAdjustmentTicketQueryPort> queryPort) {
+        return new KernelPolicyAdjustmentTicketService(
+                repository.getIfAvailable(PolicyAdjustmentTicketRepositoryPort::empty),
+                queryPort.getIfAvailable(PolicyAdjustmentTicketQueryPort::empty),
+                java.time.Clock.systemUTC());
     }
 
     @Bean
