@@ -17,8 +17,19 @@
 
 package com.miracle.ai.seahorse.agent.kernel.application.learning;
 
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopPolicy;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopReport;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopRunResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningSignal;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketNotFoundException;
+import com.miracle.ai.seahorse.agent.ports.inbound.feedback.FeedbackEvaluationCandidateQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidate;
+import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidatePage;
+import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidateQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackQuery;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackSample;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentProposal;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicket;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketDecision;
@@ -177,9 +188,10 @@ class KernelPolicyAdjustmentTicketServiceTests {
     void shouldRejectDecisionForUnknownTicket() {
         KernelPolicyAdjustmentTicketService service = service(new InMemoryTickets());
 
-        assertThrows(IllegalArgumentException.class, () -> service.decide(
-                new PolicyAdjustmentTicketDecision(
-                        "pat-missing", PolicyAdjustmentTicketStatus.APPROVED, "alice", "同意")));
+        assertThrows(PolicyAdjustmentTicketNotFoundException.class, () -> service.decide(
+                        new PolicyAdjustmentTicketDecision(
+                                "pat-missing", PolicyAdjustmentTicketStatus.APPROVED, "alice", "同意")),
+                "工单不存在是 404 语义，不能混进参数非法的 400");
     }
 
     @Test
@@ -194,8 +206,69 @@ class KernelPolicyAdjustmentTicketServiceTests {
         assertEquals(2, pending.size(), "运营看板的'待我处理'要能一次拿到全部待审批工单");
     }
 
+    @Test
+    void shouldRunTheLoopAndGenerateTicketsInOneCall() {
+        InMemoryTickets storage = new InMemoryTickets();
+        KernelPolicyAdjustmentTicketService service = new KernelPolicyAdjustmentTicketService(
+                storage, storage, CLOCK, runner(storage));
+
+        LearningLoopRunResult result = service.runAndGenerateTickets(TENANT, "ops", 100);
+
+        assertTrue(result.createdCount() > 0, "闭环跑出信号就该开工单，否则页面永远是空的");
+        assertTrue(result.tickets().stream()
+                .allMatch(ticket -> ticket.status() == PolicyAdjustmentTicketStatus.PENDING));
+        assertFalse(result.report().signals().isEmpty());
+    }
+
+    @Test
+    void shouldGenerateNothingTwiceForTheSameSignals() {
+        InMemoryTickets storage = new InMemoryTickets();
+        KernelPolicyAdjustmentTicketService service = new KernelPolicyAdjustmentTicketService(
+                storage, storage, CLOCK, runner(storage));
+
+        assertTrue(service.runAndGenerateTickets(TENANT, "ops", 100).createdCount() > 0);
+        LearningLoopRunResult second = service.runAndGenerateTickets(TENANT, "ops", 100);
+
+        assertEquals(0, second.createdCount(), "同一批信号第二次跑不该再开工单");
+        assertTrue(second.signalWithoutNewTicket(), "有信号但没新工单，前端要能解释这个状态");
+    }
+
+    @Test
+    void shouldReturnEmptyReportWhenTheLoopHasNoDataSource() {
+        InMemoryTickets storage = new InMemoryTickets();
+        KernelPolicyAdjustmentTicketService service = new KernelPolicyAdjustmentTicketService(
+                storage, storage, CLOCK);
+
+        LearningLoopRunResult result = service.runAndGenerateTickets(TENANT, "ops", 100);
+
+        assertEquals(0, result.createdCount());
+        assertTrue(result.report().summary().contains("未配置"),
+                "没接数据源时要给出可诊断的说明，而不是静默返回空");
+    }
+
     private static KernelPolicyAdjustmentTicketService service(InMemoryTickets storage) {
         return new KernelPolicyAdjustmentTicketService(storage, storage, CLOCK);
+    }
+
+    /**
+     * 用固定的反馈与复核样本喂闭环：6 条同目标的拒绝样本刚好越过默认最小样本量。
+     */
+    private static KernelLearningLoopRunner runner(InMemoryTickets storage) {
+        List<FeedbackEvaluationCandidate> feedback = List.of(
+                new FeedbackEvaluationCandidate("fb-1", "msg-1", "conv-1", "user-1", "run-1",
+                        -1, "答非所问", "", "不好的答案", NOW));
+        List<MemoryReviewFeedbackSample> reviews = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            reviews.add(new MemoryReviewFeedbackSample("sample-" + i, "cand-1", "op-1", TENANT, "user-1",
+                    "UPSERT", MemoryReviewStatus.REJECTED, "reviewer", "不准确", "PROFILE",
+                    "project.fact", "user:preference:language", "旧值", "新值",
+                    Map.of(), Map.of(),
+                    List.of("msg-1"), null, null, NOW));
+        }
+        return new KernelLearningLoopRunner(
+                LearningLoopPolicy.defaults(),
+                query -> new FeedbackEvaluationCandidatePage(feedback, feedback.size(), 10L, 1L, 1L),
+                new StubReviewRepository(reviews));
     }
 
     private static LearningLoopReport report(PolicyAdjustmentProposal... proposals) {
@@ -206,6 +279,25 @@ class KernelPolicyAdjustmentTicketServiceTests {
         LearningSignal signal = new LearningSignal(targetKey, "memory", 3, 9, 1, 8, List.of("evidence-1"));
         return PolicyAdjustmentProposal.tighten(signal,
                 PolicyAdjustmentProposal.POLICY_AUTO_COMMIT_CONFIDENCE, 0.05D);
+    }
+
+    private record StubReviewRepository(List<MemoryReviewFeedbackSample> samples)
+            implements MemoryReviewFeedbackRepositoryPort {
+
+        @Override
+        public void save(MemoryReviewFeedbackSample sample) {
+            // 该测试只读
+        }
+
+        @Override
+        public List<MemoryReviewFeedbackSample> listByCandidate(String candidateId, int limit) {
+            return samples();
+        }
+
+        @Override
+        public List<MemoryReviewFeedbackSample> listSamples(MemoryReviewFeedbackQuery query) {
+            return samples();
+        }
     }
 
     private static final class InMemoryTickets

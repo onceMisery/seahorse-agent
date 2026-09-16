@@ -136,6 +136,11 @@ const ToolInvocationAuditPage = lazy(() =>
 const ApprovalCenterPage = lazy(() =>
   import("@/pages/admin/approvals/ApprovalCenterPage").then((m) => ({ default: m.ApprovalCenterPage }))
 );
+const PolicyAdjustmentTicketPage = lazy(() =>
+  import("@/pages/admin/learning/PolicyAdjustmentTicketPage").then((m) => ({
+    default: m.PolicyAdjustmentTicketPage
+  }))
+);
 const RagEvaluationPage = lazy(() =>
   import("@/pages/admin/rag-evaluation/RagEvaluationPage").then((m) => ({ default: m.RagEvaluationPage }))
 );
@@ -249,6 +254,7 @@ const advancedAdminRoutes = [
   { path: "tools/:toolId", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具目录", <ToolDetailPage />) },
   { path: "tool-invocations", element: withFeature(ADVANCED_ADMIN_FEATURES.TOOL_CATALOG_MANAGEMENT, "工具调用审计", <ToolInvocationAuditPage />) },
   { path: "approvals", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "审批中心", <ApprovalCenterPage />) },
+  { path: "policy-tickets", element: withFeature(ADVANCED_ADMIN_FEATURES.MEMORY_GOVERNANCE, "策略调整工单", <PolicyAdjustmentTicketPage />) },
   { path: "agent-runs", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "Agent 运行管理", <AgentRunListPage />) },
   { path: "run-profiles", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "运行方案", <RunProfilePage />) },
   { path: "role-cards", element: withFeature(ADVANCED_ADMIN_FEATURES.AGENT_RUN_MANAGEMENT, "角色卡", <RoleCardPage />) },

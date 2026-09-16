@@ -18,6 +18,8 @@
 package com.miracle.ai.seahorse.agent.kernel.application.learning;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopReport;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopRunResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketNotFoundException;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentProposal;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicket;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketDecision;
@@ -58,14 +60,40 @@ public class KernelPolicyAdjustmentTicketService implements PolicyAdjustmentTick
 
     private final PolicyAdjustmentTicketRepositoryPort repository;
     private final PolicyAdjustmentTicketQueryPort query;
+    private final KernelLearningLoopRunner loopRunner;
     private final Clock clock;
 
+    /**
+     * 只管工单、不跑闭环的构造。闭环取样端口未接入时使用——
+     * 此时 {@link #runAndGenerateTickets} 返回空报告，其余能力不受影响。
+     */
     public KernelPolicyAdjustmentTicketService(PolicyAdjustmentTicketRepositoryPort repository,
                                                PolicyAdjustmentTicketQueryPort query,
                                                Clock clock) {
+        this(repository, query, clock, null);
+    }
+
+    public KernelPolicyAdjustmentTicketService(PolicyAdjustmentTicketRepositoryPort repository,
+                                               PolicyAdjustmentTicketQueryPort query,
+                                               Clock clock,
+                                               KernelLearningLoopRunner loopRunner) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.query = Objects.requireNonNull(query, "query must not be null");
         this.clock = Objects.requireNonNullElseGet(clock, Clock::systemUTC);
+        this.loopRunner = loopRunner;
+    }
+
+    @Override
+    public LearningLoopRunResult runAndGenerateTickets(String tenantId, String createdBy, int sampleLimit) {
+        String safeTenant = Objects.requireNonNullElse(tenantId, "").trim();
+        if (loopRunner == null || !loopRunner.configured()) {
+            return new LearningLoopRunResult(
+                    new LearningLoopReport(null, List.of(), List.of(), null,
+                            "闭环数据源未配置：未接入反馈或复核查询端口"),
+                    List.of());
+        }
+        LearningLoopReport report = loopRunner.analyze(safeTenant, sampleLimit);
+        return new LearningLoopRunResult(report, submitProposals(report, safeTenant, createdBy));
     }
 
     @Override
@@ -129,8 +157,7 @@ public class KernelPolicyAdjustmentTicketService implements PolicyAdjustmentTick
     public PolicyAdjustmentTicket decide(PolicyAdjustmentTicketDecision decision) {
         Objects.requireNonNull(decision, "decision must not be null");
         PolicyAdjustmentTicket current = query.findById(decision.ticketId())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "policy adjustment ticket not found: " + decision.ticketId()));
+                .orElseThrow(() -> new PolicyAdjustmentTicketNotFoundException(decision.ticketId()));
         PolicyAdjustmentTicketStatus target = decision.targetStatus();
         if (!current.status().canTransitionTo(target)) {
             throw new IllegalArgumentException("illegal ticket transition: " + current.status()

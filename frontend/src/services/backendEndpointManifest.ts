@@ -561,6 +561,14 @@ export const backendEndpointManifest = [
   },
   {
     "method": "GET",
+    "path": "/api/policy-adjustment-tickets"
+  },
+  {
+    "method": "GET",
+    "path": "/api/policy-adjustment-tickets/{}"
+  },
+  {
+    "method": "GET",
     "path": "/api/resource-acl-rules"
   },
   {
@@ -1478,6 +1486,30 @@ export const backendEndpointManifest = [
   {
     "method": "POST",
     "path": "/api/notifications/mark-read"
+  },
+  {
+    "method": "POST",
+    "path": "/api/policy-adjustment-tickets/{}/apply"
+  },
+  {
+    "method": "POST",
+    "path": "/api/policy-adjustment-tickets/{}/approve"
+  },
+  {
+    "method": "POST",
+    "path": "/api/policy-adjustment-tickets/{}/reject"
+  },
+  {
+    "method": "POST",
+    "path": "/api/policy-adjustment-tickets/{}/roll-back"
+  },
+  {
+    "method": "POST",
+    "path": "/api/policy-adjustment-tickets/from-report"
+  },
+  {
+    "method": "POST",
+    "path": "/api/policy-adjustment-tickets/generate"
   },
   {
     "method": "POST",

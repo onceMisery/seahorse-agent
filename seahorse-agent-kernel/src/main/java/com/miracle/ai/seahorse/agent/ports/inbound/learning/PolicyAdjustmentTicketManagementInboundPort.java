@@ -18,6 +18,7 @@
 package com.miracle.ai.seahorse.agent.ports.inbound.learning;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopReport;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopRunResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicket;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketDecision;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketStatus;
@@ -52,6 +53,19 @@ public interface PolicyAdjustmentTicketManagementInboundPort {
      * 对工单做一次状态迁移；非法迁移抛 {@link IllegalArgumentException}。
      */
     PolicyAdjustmentTicket decide(PolicyAdjustmentTicketDecision decision);
+
+    /**
+     * 跑一次自学习闭环并把产出的建议转成工单。
+     *
+     * <p>把它放在工单端口而不是单独开一个"闭环端口"，是因为对调用方而言这就是
+     * "生成工单"这一个动作：闭环只是取样的来源，不是另一个需要被管理的对象。
+     *
+     * @param tenantId    租户；复核侧按此过滤，反馈侧暂无该维度
+     * @param createdBy   申请人，进审计记录
+     * @param sampleLimit 单侧取样上限
+     * @return 本次闭环报告与新建工单；数据源未配置时报告为空且无新建工单，不抛异常
+     */
+    LearningLoopRunResult runAndGenerateTickets(String tenantId, String createdBy, int sampleLimit);
 
     /**
      * 只查待审批工单的便捷入口，给运营看板的"待我处理"用。

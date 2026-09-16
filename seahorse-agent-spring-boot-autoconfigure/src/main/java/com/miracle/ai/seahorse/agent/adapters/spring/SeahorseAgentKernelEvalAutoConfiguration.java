@@ -29,7 +29,10 @@ import com.miracle.ai.seahorse.agent.adapters.spring.properties.RoutingPropertie
 import com.miracle.ai.seahorse.agent.kernel.application.agent.routing.ModelRoutingPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.conversation.ConversationAttachmentParserService;
 import com.miracle.ai.seahorse.agent.kernel.application.learning.KernelLearningLoopService;
+import com.miracle.ai.seahorse.agent.kernel.application.learning.KernelLearningLoopRunner;
 import com.miracle.ai.seahorse.agent.kernel.application.learning.KernelPolicyAdjustmentTicketService;
+import com.miracle.ai.seahorse.agent.ports.outbound.feedback.FeedbackEvaluationCandidateQueryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.inbound.learning.PolicyAdjustmentTicketManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketRepositoryPort;
@@ -146,11 +149,22 @@ public class SeahorseAgentKernelEvalAutoConfiguration {
     @ConditionalOnMissingBean
     public PolicyAdjustmentTicketManagementInboundPort seahorsePolicyAdjustmentTicketService(
             ObjectProvider<PolicyAdjustmentTicketRepositoryPort> repository,
-            ObjectProvider<PolicyAdjustmentTicketQueryPort> queryPort) {
+            ObjectProvider<PolicyAdjustmentTicketQueryPort> queryPort,
+            ObjectProvider<FeedbackEvaluationCandidateQueryPort> feedbackQuery,
+            ObjectProvider<MemoryReviewFeedbackRepositoryPort> reviewRepository,
+            LearningLoopProperties properties) {
+        // 闭环取样端口同样是可选的：没接数据源时"生成工单"返回空报告而不是启动失败。
+        FeedbackEvaluationCandidateQueryPort safeFeedback =
+                feedbackQuery.getIfAvailable(FeedbackEvaluationCandidateQueryPort::empty);
+        MemoryReviewFeedbackRepositoryPort safeReviews =
+                reviewRepository.getIfAvailable(MemoryReviewFeedbackRepositoryPort::empty);
+        KernelLearningLoopRunner runner = new KernelLearningLoopRunner(
+                properties == null ? null : properties.toPolicy(), safeFeedback, safeReviews);
         return new KernelPolicyAdjustmentTicketService(
                 repository.getIfAvailable(PolicyAdjustmentTicketRepositoryPort::empty),
                 queryPort.getIfAvailable(PolicyAdjustmentTicketQueryPort::empty),
-                java.time.Clock.systemUTC());
+                java.time.Clock.systemUTC(),
+                runner);
     }
 
     @Bean

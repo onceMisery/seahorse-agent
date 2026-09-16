@@ -163,6 +163,7 @@ const menuGroups: MenuGroup[] = [
     title: "治理与可观测",
     items: [
       { path: "/admin/memory-governance", feature: "MEMORY_GOVERNANCE", label: "记忆治理", icon: Brain },
+      { path: "/admin/policy-tickets", feature: "MEMORY_GOVERNANCE", label: "策略调整工单", icon: Lightbulb },
       { path: "/admin/metadata-governance", feature: "METADATA_GOVERNANCE", label: "元数据治理", icon: ShieldCheck },
       { path: "/admin/audit", feature: "AUDIT_LOG", label: "审计日志", icon: FileText },
       { path: "/admin/cost", feature: "COST_ANALYTICS", label: "成本分析", icon: DollarSign },
@@ -236,6 +237,7 @@ const breadcrumbMap: Record<string, string> = {
   integrations: "集成",
   connectors: "OpenAPI 连接器",
   "memory-governance": "记忆治理",
+  "policy-tickets": "策略调整工单",
   "metadata-governance": "元数据治理",
   audit: "审计日志",
   cost: "成本分析",
