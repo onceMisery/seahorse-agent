@@ -1242,6 +1242,8 @@ class JdbcMemoryRepositoryAdapterTests {
                     operation_id VARCHAR(128),
                     user_id VARCHAR(64) NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',
+                    session_id VARCHAR(64),
+                    run_id VARCHAR(64),
                     requested_action VARCHAR(32) NOT NULL,
                     review_status VARCHAR(32) NOT NULL,
                     reviewer_id VARCHAR(64),

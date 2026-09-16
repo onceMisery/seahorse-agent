@@ -46,8 +46,8 @@ public class JdbcMessageFeedbackRepositoryAdapter
 
     private static final String ROLE_ASSISTANT = "assistant";
     private static final int DISLIKE_VOTE = -1;
-    private static final String SQL_FIND_CONVERSATION = """
-            SELECT conversation_id
+    private static final String SQL_FIND_MESSAGE_CONTEXT = """
+            SELECT conversation_id, agent_run_id
             FROM t_message
             WHERE id = ? AND user_id = ? AND role = ? AND deleted = 0
             LIMIT 1
@@ -60,8 +60,9 @@ public class JdbcMessageFeedbackRepositoryAdapter
             """;
     private static final String SQL_INSERT_FEEDBACK = """
             INSERT INTO t_message_feedback
-            (id, message_id, conversation_id, user_id, vote, reason, comment, create_time, update_time, deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            (id, message_id, conversation_id, user_id, run_id, vote, reason, comment, create_time, update_time,
+             deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """;
     private static final String SQL_UPDATE_FEEDBACK = """
             UPDATE t_message_feedback
@@ -91,10 +92,10 @@ public class JdbcMessageFeedbackRepositoryAdapter
     @Override
     public void upsert(MessageFeedbackSubmission feedback) {
         MessageFeedbackSubmission safeFeedback = Objects.requireNonNull(feedback, "feedback must not be null");
-        String conversationId = requireAssistantConversation(safeFeedback);
+        MessageContext context = requireAssistantMessageContext(safeFeedback);
         String feedbackId = findFeedbackId(safeFeedback);
         if (feedbackId == null) {
-            insertFeedback(safeFeedback, conversationId);
+            insertFeedback(safeFeedback, context);
             return;
         }
         updateFeedback(safeFeedback, feedbackId);
@@ -151,14 +152,16 @@ public class JdbcMessageFeedbackRepositoryAdapter
         return new FeedbackEvaluationCandidatePage(records, safeTotal, safeQuery.size(), safeQuery.current(), pages);
     }
 
-    private String requireAssistantConversation(MessageFeedbackSubmission feedback) {
-        List<String> conversations = jdbcTemplate.query(SQL_FIND_CONVERSATION,
-                (resultSet, rowNum) -> resultSet.getString("conversation_id"),
+    private MessageContext requireAssistantMessageContext(MessageFeedbackSubmission feedback) {
+        List<MessageContext> contexts = jdbcTemplate.query(SQL_FIND_MESSAGE_CONTEXT,
+                (resultSet, rowNum) -> new MessageContext(
+                        resultSet.getString("conversation_id"),
+                        resultSet.getString("agent_run_id")),
                 toLongId(feedback.messageId()), toLongId(feedback.userId()), ROLE_ASSISTANT);
-        if (conversations.isEmpty() || !hasText(conversations.get(0))) {
+        if (contexts.isEmpty() || !hasText(contexts.get(0).conversationId())) {
             throw new IllegalArgumentException("assistant message not found");
         }
-        return conversations.get(0);
+        return contexts.get(0);
     }
 
     private String findFeedbackId(MessageFeedbackSubmission feedback) {
@@ -171,13 +174,14 @@ public class JdbcMessageFeedbackRepositoryAdapter
         return ids.get(0);
     }
 
-    private void insertFeedback(MessageFeedbackSubmission feedback, String conversationId) {
+    private void insertFeedback(MessageFeedbackSubmission feedback, MessageContext context) {
         Timestamp now = Timestamp.from(feedback.submitTime());
         jdbcTemplate.update(SQL_INSERT_FEEDBACK,
                 nextId(),
                 toLongId(feedback.messageId()),
-                toLongId(conversationId),
+                toLongId(context.conversationId()),
                 toLongId(feedback.userId()),
+                context.runId(),
                 feedback.vote(),
                 feedback.reason(),
                 feedback.comment(),
@@ -263,5 +267,14 @@ public class JdbcMessageFeedbackRepositoryAdapter
     }
 
     private record QueryParts(String whereSql, Object[] args) {
+    }
+
+    /**
+     * 反馈落库时从 {@code t_message} 反查出的上下文。
+     *
+     * <p>runId 取的是 {@code t_message.agent_run_id}：反馈表自身不掌握运行标识，
+     * 而消息被清理后这条线索也会丢失，故在提交时快照一份。
+     */
+    private record MessageContext(String conversationId, String runId) {
     }
 }

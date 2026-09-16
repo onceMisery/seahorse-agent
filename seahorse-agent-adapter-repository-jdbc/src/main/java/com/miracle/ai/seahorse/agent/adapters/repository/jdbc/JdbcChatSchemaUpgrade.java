@@ -155,6 +155,7 @@ public class JdbcChatSchemaUpgrade {
         widenColumns("t_rag_trace_node", List.of("id", "trace_id", "node_id", "parent_node_id", "node_type"));
         widenColumns("t_short_term_memory", List.of("id", "user_id", "conversation_id"));
         ensureLayeredMemoryLifecycleColumns();
+        ensureLearningSignalColumns();
     }
 
     private void ensureTaskTable() {
@@ -942,6 +943,22 @@ public class JdbcChatSchemaUpgrade {
         }
         addColumnIfMissing("t_memory_review_candidate", "chosen_content", "TEXT");
         addColumnIfMissing("t_memory_review_candidate", "chosen_metadata", "JSONB");
+    }
+
+    /**
+     * 自学习闭环的共有维度列：让"用户点踩"与"记忆复核"能按同一维度聚合。
+     *
+     * <p>两列都可空——历史数据与拿不到 runId 的复核样本一律留 NULL，
+     * 聚合侧显式跳过空值，绝不把空值聚成一个桶。
+     */
+    private void ensureLearningSignalColumns() {
+        if (tableExists("t_message_feedback")) {
+            addColumnIfMissing("t_message_feedback", "run_id", "VARCHAR(64)");
+        }
+        if (tableExists("t_memory_review_feedback_sample")) {
+            addColumnIfMissing("t_memory_review_feedback_sample", "session_id", "VARCHAR(64)");
+            addColumnIfMissing("t_memory_review_feedback_sample", "run_id", "VARCHAR(64)");
+        }
     }
 
     private void ensureMemoryAggregationBufferColumns() {

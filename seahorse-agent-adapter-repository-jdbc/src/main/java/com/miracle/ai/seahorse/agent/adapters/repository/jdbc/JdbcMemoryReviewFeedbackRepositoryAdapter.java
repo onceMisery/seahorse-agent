@@ -47,18 +47,20 @@ public class JdbcMemoryReviewFeedbackRepositoryAdapter implements MemoryReviewFe
         Objects.requireNonNull(sample, "sample must not be null");
         jdbcTemplate.update("""
                 INSERT INTO t_memory_review_feedback_sample
-                (id, candidate_id, operation_id, user_id, tenant_id, requested_action, review_status,
-                 reviewer_id, reviewer_comment, target_layer, target_kind, target_key,
+                (id, candidate_id, operation_id, user_id, tenant_id, session_id, run_id, requested_action,
+                 review_status, reviewer_id, reviewer_comment, target_layer, target_kind, target_key,
                  rejected_content, chosen_content, rejected_metadata, chosen_metadata, source_message_ids,
                  reviewed_memory_id, reviewed_layer, create_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON),
-                        ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON),
+                        CAST(? AS JSON), ?, ?, ?)
                 """,
                 sample.sampleId(),
                 sample.candidateId(),
                 sample.operationId(),
                 JdbcMemorySupport.toLongId(sample.userId()),
                 sample.tenantId(),
+                blankToNull(sample.sessionId()),
+                blankToNull(sample.runId()),
                 sample.requestedAction(),
                 sample.reviewStatus().name(),
                 sample.reviewerId(),
@@ -132,6 +134,8 @@ public class JdbcMemoryReviewFeedbackRepositoryAdapter implements MemoryReviewFe
                 text(rs.getString("operation_id")),
                 text(rs.getString("tenant_id")),
                 text(rs.getString("user_id")),
+                text(rs.getString("session_id")),
+                text(rs.getString("run_id")),
                 text(rs.getString("requested_action")),
                 reviewStatus(rs.getString("review_status")),
                 text(rs.getString("reviewer_id")),
@@ -170,5 +174,9 @@ public class JdbcMemoryReviewFeedbackRepositoryAdapter implements MemoryReviewFe
 
     private String text(String value) {
         return Objects.requireNonNullElse(value, "").trim();
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

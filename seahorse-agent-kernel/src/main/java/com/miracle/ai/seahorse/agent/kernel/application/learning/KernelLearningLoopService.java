@@ -61,15 +61,22 @@ import java.util.Objects;
  *   <li><b>每次运行都回访上一次改动。</b>否则闭环只是"不断产生新猜测"。</li>
  * </ol>
  *
- * <p>当前数据模型的诚实说明：反馈记录与复核记录之间只有 userId 是共有字段，
- * 没有可靠的 run↔memory 关联键，因此两者的聚合分别在"反馈原因"与"记忆 targetKey"
- * 维度上进行，再叠加一个全局聚合。这不是理想形态，但它如实反映了现有数据能支撑的粒度。
+ * <p>聚合维度说明：反馈按"反馈原因"聚合、复核按"记忆 targetKey"聚合，这两个维度各自
+ * 只覆盖一类信号；两类信号真正的共有维度是<b>会话</b>（sessionId，取值即 conversationId），
+ * 因此额外按会话聚合一层——同一个会话里既有点踩又有记忆被拒，比任何单侧信号都更能说明
+ * "这次交互的答案没被认可"。会话维度只用于观测与定位（也是后续落地工单的抓手），
+ * <b>不作为策略调整依据</b>：会话是一次性的，不构成可复用的调整目标。
+ *
+ * <p>运行维度（runId）目前只落库留痕、不参与聚合：复核发生在人工治理链路，
+ * 捕获点拿不到 runId，强行用消息 ID 反查又与 {@code t_message} 主键类型不一致，
+ * 对齐不可靠。宁可留空，也不要造一个看起来对齐、实际对不上的维度。
  */
 public class KernelLearningLoopService {
 
     private static final Logger LOG = LoggerFactory.getLogger(KernelLearningLoopService.class);
 
     private static final String FEEDBACK_KIND = "feedback-reason";
+    private static final String SESSION_KIND = "session-scope";
     private static final String UNATTRIBUTED = "unattributed";
     private static final List<String> NO_EVIDENCE = List.of();
 
@@ -97,17 +104,23 @@ public class KernelLearningLoopService {
                                       Double baselinePassRate,
                                       Double currentPassRate,
                                       PolicyAdjustmentProposal previouslyApplied) {
-        List<LearningSignal> signals = new ArrayList<>();
-        signals.addAll(aggregateFeedback(feedback));
-        signals.addAll(aggregateReviews(reviewSamples));
-        LearningSignal global = globalSignal(signals);
-        List<LearningSignal> ordered = new ArrayList<>(signals);
+        // 维度信号：每条样本只落入自己那一族的一个桶，可被全局汇总而不重复计数。
+        List<LearningSignal> dimensionSignals = new ArrayList<>();
+        dimensionSignals.addAll(aggregateFeedback(feedback));
+        dimensionSignals.addAll(aggregateReviews(reviewSamples));
+        // 会话信号是同一批样本的"另一种切法"，若并入全局会把每条样本数两遍，
+        // 因此只进报告、不进全局汇总。
+        List<LearningSignal> sessionSignals = aggregateBySession(feedback, reviewSamples);
+
+        LearningSignal global = globalSignal(dimensionSignals);
+        List<LearningSignal> ordered = new ArrayList<>(dimensionSignals);
+        ordered.addAll(sessionSignals);
         if (global.sampleCount() > 0) {
             ordered.add(global);
         }
         ordered.sort(Comparator.comparingInt(LearningSignal::sampleCount).reversed());
 
-        List<PolicyAdjustmentProposal> proposals = propose(signals, global);
+        List<PolicyAdjustmentProposal> proposals = propose(dimensionSignals, global);
         PreviousProposalOutcome outcome = evaluate(previouslyApplied, baselinePassRate, currentPassRate);
         String summary = summarize(ordered.size(), proposals, outcome);
         LearningLoopReport report = new LearningLoopReport(Instant.now(), ordered, proposals, outcome, summary);
@@ -182,6 +195,82 @@ public class KernelLearningLoopService {
         return signals;
     }
 
+    /**
+     * 按会话聚合——反馈与复核唯一可靠的共有维度。
+     *
+     * <p>两条刻意的取舍：
+     * <ol>
+     *   <li><b>跳过空 sessionId，而不是把空值聚成一个桶。</b>复核样本在历史数据里
+     *       sessionId 为 NULL，若当成同一个 key 聚合，会形成一个巨大的"未知会话"伪信号，
+     *       把真实信号彻底淹没。宁可少一点信号，也不要一个看起来很强、实际是垃圾的信号。</li>
+     *   <li><b>只保留至少出现一次负面事件的会话。</b>全正面（只有点赞与复核通过）的会话
+     *       对"该改什么"没有信息量，纳入只会稀释。</li>
+     * </ol>
+     */
+    private List<LearningSignal> aggregateBySession(List<FeedbackEvaluationCandidate> feedback,
+                                                    List<MemoryReviewFeedbackSample> reviewSamples) {
+        Map<String, int[]> bySession = new LinkedHashMap<>();
+        Map<String, List<String>> evidence = new HashMap<>();
+
+        if (feedback != null) {
+            for (FeedbackEvaluationCandidate candidate : feedback) {
+                if (candidate == null) {
+                    continue;
+                }
+                String session = normalize(candidate.conversationId());
+                if (session.isEmpty()) {
+                    continue;
+                }
+                int[] counts = bySession.computeIfAbsent(session, ignored -> new int[4]);
+                if (candidate.vote() > 0) {
+                    counts[0]++;
+                } else if (candidate.vote() < 0) {
+                    counts[1]++;
+                }
+                evidence.computeIfAbsent(session, ignored -> new ArrayList<>())
+                        .add("feedback:" + candidate.feedbackId());
+            }
+        }
+        if (reviewSamples != null) {
+            for (MemoryReviewFeedbackSample sample : reviewSamples) {
+                if (sample == null) {
+                    continue;
+                }
+                String session = normalize(sample.sessionId());
+                if (session.isEmpty()) {
+                    continue;
+                }
+                if (sample.reviewStatus() != MemoryReviewStatus.APPLIED
+                        && sample.reviewStatus() != MemoryReviewStatus.REJECTED) {
+                    continue;
+                }
+                int[] counts = bySession.computeIfAbsent(session, ignored -> new int[4]);
+                if (sample.reviewStatus() == MemoryReviewStatus.REJECTED) {
+                    counts[3]++;
+                } else {
+                    counts[2]++;
+                }
+                evidence.computeIfAbsent(session, ignored -> new ArrayList<>())
+                        .add("review:" + sample.sampleId());
+            }
+        }
+
+        List<LearningSignal> signals = new ArrayList<>(bySession.size());
+        bySession.forEach((session, counts) -> {
+            int positiveVotes = counts[0];
+            int negativeVotes = counts[1];
+            int approved = counts[2];
+            int rejected = counts[3];
+            if (negativeVotes + rejected == 0) {
+                return;
+            }
+            signals.add(new LearningSignal(
+                    session, SESSION_KIND, positiveVotes, negativeVotes, approved, rejected,
+                    cap(evidence.get(session))));
+        });
+        return signals;
+    }
+
     private static LearningSignal globalSignal(List<LearningSignal> signals) {
         int positiveVotes = 0;
         int negativeVotes = 0;
@@ -204,7 +293,9 @@ public class KernelLearningLoopService {
             if (!signal.actionable(policy.minSamples())
                     || LearningSignal.GLOBAL_TARGET.equals(signal.targetKey())
                     // 反馈信号没有"记忆目标"可言，不能据此隔离某条记忆
-                    || FEEDBACK_KIND.equals(signal.targetKind())) {
+                    || FEEDBACK_KIND.equals(signal.targetKind())
+                    // 会话是一次性的，不构成可复用的调整目标；它只用于观测与定位
+                    || SESSION_KIND.equals(signal.targetKind())) {
                 continue;
             }
             if (signal.disapprovalRate() >= policy.disapprovalRateThreshold()) {

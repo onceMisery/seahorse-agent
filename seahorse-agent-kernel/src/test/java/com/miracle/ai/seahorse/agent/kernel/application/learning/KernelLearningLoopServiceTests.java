@@ -222,6 +222,137 @@ class KernelLearningLoopServiceTests {
         assertTrue(report.toJson().contains("\"previousOutcome\":\"NO_PROPOSAL\""));
     }
 
+    @Test
+    void shouldAggregateFeedbackAndReviewsBySharedSessionId() {
+        List<FeedbackEvaluationCandidate> feedback = List.of(
+                feedbackInSession("f1", "conv-7", -1, "答非所问"));
+        List<MemoryReviewFeedbackSample> reviews = List.of(
+                reviewInSession("s1", "conv-7", "key-1", MemoryReviewStatus.REJECTED));
+
+        LearningLoopReport report = new KernelLearningLoopService()
+                .analyze(feedback, reviews, null, null, null);
+
+        List<LearningSignal> sessionSignals = sessionSignals(report);
+        assertEquals(1, sessionSignals.size(), "同一会话的点踩与复核被拒应合并为一条会话信号");
+        LearningSignal signal = sessionSignals.get(0);
+        assertEquals("conv-7", signal.targetKey());
+        assertEquals(1, signal.negativeVotes());
+        assertEquals(1, signal.rejectedReviews());
+    }
+
+    @Test
+    void shouldNotCollapseSamplesWithoutSessionIdIntoOneBucket() {
+        List<MemoryReviewFeedbackSample> reviews = List.of(
+                review("s1", "key-1", MemoryReviewStatus.REJECTED),
+                review("s2", "key-2", MemoryReviewStatus.REJECTED));
+
+        LearningLoopReport report = new KernelLearningLoopService()
+                .analyze(List.of(), reviews, null, null, null);
+
+        assertTrue(sessionSignals(report).isEmpty(),
+                "sessionId 为空的样本必须被跳过，绝不能聚成一个巨大的未知会话伪信号");
+    }
+
+    @Test
+    void shouldSkipSessionsWithOnlyPositiveEvents() {
+        List<FeedbackEvaluationCandidate> feedback = List.of(
+                feedbackInSession("f1", "conv-9", 1, null));
+        List<MemoryReviewFeedbackSample> reviews = List.of(
+                reviewInSession("s1", "conv-9", "key-1", MemoryReviewStatus.APPLIED));
+
+        LearningLoopReport report = new KernelLearningLoopService()
+                .analyze(feedback, reviews, null, null, null);
+
+        assertTrue(sessionSignals(report).isEmpty(), "全正面的会话对「该改什么」没有信息量");
+    }
+
+    @Test
+    void shouldNotDoubleCountSessionSignalsIntoGlobalTotal() {
+        List<FeedbackEvaluationCandidate> feedback = List.of(
+                feedbackInSession("f1", "conv-7", -1, "答非所问"),
+                feedbackInSession("f2", "conv-7", -1, "答非所问"));
+        List<MemoryReviewFeedbackSample> reviews = List.of(
+                reviewInSession("s1", "conv-7", "key-1", MemoryReviewStatus.REJECTED),
+                reviewInSession("s2", "conv-7", "key-1", MemoryReviewStatus.REJECTED));
+
+        LearningLoopReport report = new KernelLearningLoopService()
+                .analyze(feedback, reviews, null, null, null);
+
+        LearningSignal global = report.signals().stream()
+                .filter(signal -> LearningSignal.GLOBAL_TARGET.equals(signal.targetKey()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(4, global.sampleCount(),
+                "会话信号是同批样本的另一种切法，若并入全局会把每条样本数两遍");
+    }
+
+    @Test
+    void shouldNotProposePolicyChangesFromSessionSignals() {
+        List<FeedbackEvaluationCandidate> feedback = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            feedback.add(feedbackInSession("f" + i, "conv-7", -1, "答非所问"));
+        }
+
+        LearningLoopReport report = new KernelLearningLoopService()
+                .analyze(feedback, List.of(), null, null, null);
+
+        assertFalse(report.proposals().stream().anyMatch(proposal ->
+                        "conv-7".equals(proposal.targetKey())),
+                "会话是一次性的，不构成可复用的调整目标");
+    }
+
+    private static List<LearningSignal> sessionSignals(LearningLoopReport report) {
+        return report.signals().stream()
+                .filter(signal -> "session-scope".equals(signal.targetKind()))
+                .toList();
+    }
+
+    private static MemoryReviewFeedbackSample reviewInSession(String sampleId,
+                                                              String sessionId,
+                                                              String targetKey,
+                                                              MemoryReviewStatus status) {
+        return new MemoryReviewFeedbackSample(
+                sampleId,
+                "candidate-" + sampleId,
+                "operation-" + sampleId,
+                "default",
+                "user-1",
+                sessionId,
+                "",
+                "REVIEW",
+                status,
+                "reviewer-1",
+                "",
+                "profile",
+                "preference",
+                targetKey,
+                "被拒绝的内容",
+                status == MemoryReviewStatus.APPLIED ? "被采用的内容" : "",
+                Map.of(),
+                Map.of(),
+                List.of(),
+                "memory-1",
+                "profile",
+                NOW);
+    }
+
+    private static FeedbackEvaluationCandidate feedbackInSession(String feedbackId,
+                                                                 String conversationId,
+                                                                 int vote,
+                                                                 String reason) {
+        return new FeedbackEvaluationCandidate(
+                feedbackId,
+                "message-" + feedbackId,
+                conversationId,
+                "user-1",
+                "run-1",
+                vote,
+                reason,
+                "",
+                "回答内容",
+                NOW);
+    }
+
     private static MemoryReviewFeedbackSample review(String sampleId, String targetKey, MemoryReviewStatus status) {
         return new MemoryReviewFeedbackSample(
                 sampleId,

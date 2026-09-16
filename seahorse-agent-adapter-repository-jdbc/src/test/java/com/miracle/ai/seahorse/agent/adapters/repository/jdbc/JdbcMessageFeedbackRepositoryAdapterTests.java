@@ -62,6 +62,30 @@ class JdbcMessageFeedbackRepositoryAdapterTests {
     }
 
     @Test
+    void shouldSnapshotRunIdFromTheMessageAtSubmissionTime() {
+        insertMessage("1", "1", "1", "assistant", "run-abc", "candidate answer");
+
+        adapter.upsert(new MessageFeedbackSubmission("1", "1", -1, "incorrect", "needs fact fix",
+                Instant.now()));
+
+        String runId = jdbcTemplate.queryForObject(
+                "SELECT run_id FROM t_message_feedback WHERE message_id = ?", String.class, 1L);
+        assertThat(runId).isEqualTo("run-abc");
+    }
+
+    @Test
+    void shouldLeaveRunIdNullWhenTheMessageHasNoRun() {
+        insertMessage("1", "1", "1", "assistant");
+
+        adapter.upsert(new MessageFeedbackSubmission("1", "1", -1, "incorrect", "needs fact fix",
+                Instant.now()));
+
+        String runId = jdbcTemplate.queryForObject(
+                "SELECT run_id FROM t_message_feedback WHERE message_id = ?", String.class, 1L);
+        assertThat(runId).isNull();
+    }
+
+    @Test
     void shouldRejectFeedbackForUserMessage() {
         insertMessage("2", "1", "1", "user");
 
@@ -114,6 +138,7 @@ class JdbcMessageFeedbackRepositoryAdapterTests {
                     message_id BIGINT NOT NULL,
                     conversation_id BIGINT NOT NULL,
                     user_id BIGINT NOT NULL,
+                    run_id VARCHAR(64),
                     vote INTEGER NOT NULL,
                     reason VARCHAR(255),
                     comment TEXT,

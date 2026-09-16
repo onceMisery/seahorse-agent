@@ -28,6 +28,16 @@ public record MemoryReviewFeedbackSample(
         String operationId,
         String tenantId,
         String userId,
+        /**
+         * 会话维度（取值即 conversationId），与用户反馈的 conversationId 同源。
+         * 这是两类信号目前唯一可对齐的共有维度——此前反馈与复核之间只有 userId 能对应上。
+         */
+        String sessionId,
+        /**
+         * 产生该复核样本的运行标识。复核发生在人工治理链路、捕获点拿不到 runId，
+         * 故此列当前留空，仅作留痕，不参与聚合。
+         */
+        String runId,
         String requestedAction,
         MemoryReviewStatus reviewStatus,
         String reviewerId,
@@ -51,6 +61,8 @@ public record MemoryReviewFeedbackSample(
         operationId = normalize(operationId, "");
         tenantId = normalize(tenantId, "default");
         userId = normalize(userId, "");
+        sessionId = normalize(sessionId, "");
+        runId = normalize(runId, "");
         requestedAction = normalize(requestedAction, MemoryIngestionAction.REVIEW.name());
         reviewStatus = Objects.requireNonNullElse(reviewStatus, MemoryReviewStatus.PENDING);
         reviewerId = normalize(reviewerId, "");
@@ -68,6 +80,39 @@ public record MemoryReviewFeedbackSample(
         createdAt = Objects.requireNonNullElseGet(createdAt, Instant::now);
     }
 
+    /**
+     * 兼容构造：未提供 sessionId / runId 时按空值处理。
+     *
+     * <p>既有的 18 处构造点（含各模块测试）因此无需逐个改动，保持向后兼容。
+     * 需要携带会话维度的调用方请使用完整规范构造，或走 {@link #fromDecision}。
+     */
+    public MemoryReviewFeedbackSample(String sampleId,
+                                      String candidateId,
+                                      String operationId,
+                                      String tenantId,
+                                      String userId,
+                                      String requestedAction,
+                                      MemoryReviewStatus reviewStatus,
+                                      String reviewerId,
+                                      String reviewComment,
+                                      String targetLayer,
+                                      String targetKind,
+                                      String targetKey,
+                                      String rejectedContent,
+                                      String chosenContent,
+                                      Map<String, Object> rejectedMetadata,
+                                      Map<String, Object> chosenMetadata,
+                                      List<String> sourceMessageIds,
+                                      String reviewedMemoryId,
+                                      String reviewedLayer,
+                                      Instant createdAt) {
+        this(sampleId, candidateId, operationId, tenantId, userId, "", "",
+                requestedAction, reviewStatus, reviewerId, reviewComment,
+                targetLayer, targetKind, targetKey, rejectedContent, chosenContent,
+                rejectedMetadata, chosenMetadata, sourceMessageIds,
+                reviewedMemoryId, reviewedLayer, createdAt);
+    }
+
     public static MemoryReviewFeedbackSample fromDecision(String sampleId,
                                                           MemoryReviewRecord pending,
                                                           MemoryReviewRecord reviewed) {
@@ -79,6 +124,8 @@ public record MemoryReviewFeedbackSample(
                 pending.operationId(),
                 pending.tenantId(),
                 pending.userId(),
+                pending.conversationId(),
+                "",
                 pending.requestedAction(),
                 reviewed.reviewStatus(),
                 reviewed.reviewerId(),

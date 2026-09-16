@@ -71,6 +71,50 @@ class JdbcMemoryReviewFeedbackRepositoryAdapterTests {
         assertThat(samples.get(0).chosenMetadata()).containsEntry("reviewReason", "human");
     }
 
+    @Test
+    void shouldPersistSessionIdAndTolerateMissingRunId() {
+        adapter.save(sampleWithSession("sample-1", "tenant-1", "user-1", "conv-42", "",
+                MemoryReviewStatus.REJECTED));
+
+        List<MemoryReviewFeedbackSample> samples = adapter.listSamples(new MemoryReviewFeedbackQuery(
+                "tenant-1", "user-1", null, null, null, 10));
+
+        assertThat(samples).hasSize(1);
+        assertThat(samples.get(0).sessionId()).isEqualTo("conv-42");
+        assertThat(samples.get(0).runId()).isEmpty();
+    }
+
+    private MemoryReviewFeedbackSample sampleWithSession(String sampleId,
+                                                         String tenantId,
+                                                         String userId,
+                                                         String sessionId,
+                                                         String runId,
+                                                         MemoryReviewStatus status) {
+        return new MemoryReviewFeedbackSample(
+                sampleId,
+                "candidate-" + sampleId,
+                "op-" + sampleId,
+                tenantId,
+                userId,
+                sessionId,
+                runId,
+                "REVIEW",
+                status,
+                "auditor",
+                "comment",
+                "SHORT_TERM",
+                "PROJECT_FACT",
+                "project.fact",
+                "rejected",
+                "",
+                Map.of(),
+                Map.of(),
+                List.of(),
+                "memory-1",
+                "SHORT_TERM",
+                Instant.parse("2026-05-22T08:00:00Z"));
+    }
+
     private MemoryReviewFeedbackSample sample(String sampleId,
                                               String candidateId,
                                               String tenantId,
