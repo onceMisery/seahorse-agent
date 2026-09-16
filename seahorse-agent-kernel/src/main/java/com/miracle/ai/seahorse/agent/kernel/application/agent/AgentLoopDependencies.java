@@ -125,6 +125,8 @@ public record AgentLoopDependencies(
                 .perToolTimeout(safe.perToolTimeout())
                 .modelTurnTimeout(safe.modelTurnTimeout())
                 .maxParallelTools(safe.maxParallelTools())
+                .parallelSteps(safe.parallelSteps())
+                .maxParallelSteps(safe.maxParallelSteps())
                 .contextEnvelope(envelope)
                 .taskPlanning(safe.taskPlanning())
                 .build();

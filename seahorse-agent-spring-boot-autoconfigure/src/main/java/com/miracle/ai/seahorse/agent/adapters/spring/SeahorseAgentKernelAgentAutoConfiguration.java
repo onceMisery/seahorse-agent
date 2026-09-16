@@ -182,6 +182,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     private static final String PROP_PER_TOOL_TIMEOUT = "seahorse-agent.chat.agent.per-tool-timeout";
     private static final String PROP_MODEL_TURN_TIMEOUT = "seahorse-agent.chat.agent.model-turn-timeout";
     private static final String PROP_MAX_PARALLEL_TOOLS = "seahorse-agent.chat.agent.max-parallel-tools";
+    private static final String PROP_PARALLEL_STEPS = "seahorse-agent.chat.agent.parallel-steps";
+    private static final String PROP_MAX_PARALLEL_STEPS = "seahorse-agent.chat.agent.max-parallel-steps";
     private static final String PROP_CONTEXT_ENVELOPE_PREFIX =
             "seahorse-agent.chat.agent.context-envelope";
     private static final String PROP_MCP_INCLUDE = "seahorse-agent.chat.agent.tools.mcp.include";
@@ -276,6 +278,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 .modelTurnTimeout(parseDuration(
                         environment.getProperty(PROP_MODEL_TURN_TIMEOUT), Duration.ofMinutes(3)))
                 .maxParallelTools(environment.getProperty(PROP_MAX_PARALLEL_TOOLS, Integer.class, 1))
+                .parallelSteps(environment.getProperty(PROP_PARALLEL_STEPS, Boolean.class, Boolean.FALSE))
+                .maxParallelSteps(environment.getProperty(PROP_MAX_PARALLEL_STEPS, Integer.class, 2))
                 .contextEnvelope(new ModelContextEnvelopeOptions(
                         ModelContextEnvelopeOptions.Mode.parse(environment.getProperty(
                                 PROP_CONTEXT_ENVELOPE_PREFIX + ".mode", "ENFORCE")),

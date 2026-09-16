@@ -38,6 +38,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -50,6 +51,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class KernelAgentLoopPlanningTests {
 
     private static final String GOAL = "1. 收集 Redis 资料 2. 撰写对比报告";
+    /** 第 2 步带"同时"，规划器会让它与第 1 步落在同一个波次。 */
+    private static final String PARALLEL_GOAL = "1. 收集资料 2. 同时整理社区 benchmark 3. 汇总";
 
     @Test
     void shouldNotPlanWhenPolicyIsDisabledByDefault() {
@@ -107,6 +110,36 @@ class KernelAgentLoopPlanningTests {
                 "循环产出最终答案后，对应步骤应被标记为完成");
     }
 
+    /**
+     * 并行步骤（P3-3）：波次内互不依赖的步骤应各自发起一次带聚焦消息的模型轮次。
+     *
+     * <p>目标里第 2 步带"同时"，确定性规划器会让它继承第 1 步的依赖（此处为空），
+     * 于是第 1、2 步落在同一个波次里。
+     */
+    @Test
+    void shouldIssueOneFocusedModelTurnPerStepInAParallelWave() {
+        RecordingModel model = new RecordingModel("done");
+        RecordingRunStepRecorder recorder = new RecordingRunStepRecorder();
+
+        runParallel(model, recorder, true, 2);
+
+        assertEquals(2, model.requestCount(), "同一波次的两个步骤应各自拿到一次模型轮次");
+        assertTrue(model.systemContents().contains("收集资料"));
+        assertTrue(model.systemContents().contains("同时整理社区 benchmark"));
+        assertTrue(model.systemContents().contains("现在只推进规划中的这一步"));
+    }
+
+    @Test
+    void shouldKeepSerialTurnsWhenParallelStepsAreDisabled() {
+        RecordingModel model = new RecordingModel("done");
+        RecordingRunStepRecorder recorder = new RecordingRunStepRecorder();
+
+        runParallel(model, recorder, false, 2);
+
+        assertEquals(1, model.requestCount(), "关闭并行时行为必须与引入前一致：一次轮次就结束");
+        assertFalse(model.systemContents().contains("现在只推进规划中的这一步"));
+    }
+
     private static AgentLoopResult run(RecordingModel model,
                                        RecordingRunStepRecorder recorder,
                                        TaskPlanningPolicy policy) {
@@ -141,10 +174,36 @@ class KernelAgentLoopPlanningTests {
                 .build());
     }
 
+    private static AgentLoopResult runParallel(RecordingModel model,
+                                               RecordingRunStepRecorder recorder,
+                                               boolean parallelSteps,
+                                               int maxParallelSteps) {
+        KernelAgentLoopOptions options = KernelAgentLoopOptions.builder()
+                .maxSteps(4)
+                .taskPlanning(TaskPlanningPolicy.builder().enabled(true).maxSteps(3).build())
+                .parallelSteps(parallelSteps)
+                .maxParallelSteps(maxParallelSteps)
+                .contextEnvelope(ModelContextEnvelopeOptions.defaults()
+                        .withMode(ModelContextEnvelopeOptions.Mode.DISABLED))
+                .build();
+        KernelAgentLoop loop = new KernelAgentLoop(new AgentLoopDependencies(
+                model, ToolRegistryPort.empty(), null, options, null, null, recorder,
+                null, null, null, null, null, null, null, null));
+
+        return loop.execute(AgentLoopRequest.builder()
+                .question(PARALLEL_GOAL)
+                .runId("run-planning-parallel")
+                .allowedToolIds(List.of())
+                .samplingOptions(ChatSamplingOptions.builder().temperature(0.1D).build())
+                .maxSteps(4)
+                .build());
+    }
+
     private static final class RecordingModel implements StreamingChatModelPort {
 
         private final String answer;
-        private final List<List<ChatMessage>> requests = new ArrayList<>();
+        // 并行波次会从多个线程记录请求，必须是线程安全的容器
+        private final List<List<ChatMessage>> requests = new CopyOnWriteArrayList<>();
 
         private RecordingModel(String answer) {
             this.answer = answer;
@@ -166,6 +225,10 @@ class KernelAgentLoopPlanningTests {
             callback.onComplete();
             return () -> {
             };
+        }
+
+        private int requestCount() {
+            return requests.size();
         }
 
         private List<String> allContents() {

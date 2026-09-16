@@ -31,11 +31,15 @@ public final class KernelAgentLoopOptions {
     private static final Duration DEFAULT_PER_TOOL_TIMEOUT = Duration.ofSeconds(30);
     private static final Duration DEFAULT_MODEL_TURN_TIMEOUT = Duration.ofMinutes(3);
     private static final int DEFAULT_MAX_PARALLEL_TOOLS = 1;
+    private static final boolean DEFAULT_PARALLEL_STEPS = false;
+    private static final int DEFAULT_MAX_PARALLEL_STEPS = 2;
 
     private final int maxSteps;
     private final Duration perToolTimeout;
     private final Duration modelTurnTimeout;
     private final int maxParallelTools;
+    private final boolean parallelSteps;
+    private final int maxParallelSteps;
     private final ModelContextEnvelopeOptions contextEnvelope;
     private final TaskPlanningPolicy taskPlanning;
 
@@ -57,7 +61,12 @@ public final class KernelAgentLoopOptions {
         this.maxSteps = b.maxSteps;
         this.perToolTimeout = b.perToolTimeout;
         this.modelTurnTimeout = b.modelTurnTimeout;
+        if (b.maxParallelSteps <= 0) {
+            throw new IllegalArgumentException("maxParallelSteps 必须 > 0");
+        }
         this.maxParallelTools = b.maxParallelTools;
+        this.parallelSteps = b.parallelSteps;
+        this.maxParallelSteps = b.maxParallelSteps;
         this.contextEnvelope = Objects.requireNonNullElseGet(
                 b.contextEnvelope, ModelContextEnvelopeOptions::defaults);
         this.taskPlanning = Objects.requireNonNullElseGet(b.taskPlanning, TaskPlanningPolicy::defaults);
@@ -84,6 +93,20 @@ public final class KernelAgentLoopOptions {
     }
 
     /**
+     * @return 是否让同一个波次内互不依赖的步骤并发发起模型轮次，默认 false
+     */
+    public boolean parallelSteps() {
+        return parallelSteps;
+    }
+
+    /**
+     * @return 单个波次内并发发起的模型轮次上限，默认 2
+     */
+    public int maxParallelSteps() {
+        return maxParallelSteps;
+    }
+
+    /**
      * @return 任务规划策略，默认关闭（{@link TaskPlanningPolicy#defaults()}）
      */
     public TaskPlanningPolicy taskPlanning() {
@@ -103,6 +126,8 @@ public final class KernelAgentLoopOptions {
         private Duration perToolTimeout = DEFAULT_PER_TOOL_TIMEOUT;
         private Duration modelTurnTimeout = DEFAULT_MODEL_TURN_TIMEOUT;
         private int maxParallelTools = DEFAULT_MAX_PARALLEL_TOOLS;
+        private boolean parallelSteps = DEFAULT_PARALLEL_STEPS;
+        private int maxParallelSteps = DEFAULT_MAX_PARALLEL_STEPS;
         private ModelContextEnvelopeOptions contextEnvelope = ModelContextEnvelopeOptions.defaults();
         private TaskPlanningPolicy taskPlanning = TaskPlanningPolicy.defaults();
 
@@ -123,6 +148,16 @@ public final class KernelAgentLoopOptions {
 
         public Builder maxParallelTools(int maxParallelTools) {
             this.maxParallelTools = maxParallelTools;
+            return this;
+        }
+
+        public Builder parallelSteps(boolean parallelSteps) {
+            this.parallelSteps = parallelSteps;
+            return this;
+        }
+
+        public Builder maxParallelSteps(int maxParallelSteps) {
+            this.maxParallelSteps = maxParallelSteps;
             return this;
         }
 

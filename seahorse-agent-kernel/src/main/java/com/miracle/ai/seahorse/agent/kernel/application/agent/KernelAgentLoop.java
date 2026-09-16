@@ -41,6 +41,9 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputArtifactTy
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.plan.TaskPlan;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputGovernanceResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.output.OutputValidationRequest;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.plan.PlanStep;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.plan.PlanWave;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.plan.TaskPlanScheduler;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.policy.ToolPolicyReasonCodes;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepStatus;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.runtime.AgentStepType;
@@ -116,12 +119,6 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
     private static final String ARTIFACT_TYPE_FIELD = "artifactType";
     private static final String MARKDOWN_ARTIFACT_TYPE = "MARKDOWN";
     private static final ToolRiskLevel DEFAULT_TOOL_RISK_LEVEL = ToolRiskLevel.HIGH;
-    private static final int TOOL_OBSERVATION_CONTEXT_PREVIEW_LIMIT = 800;
-    private static final Set<String> LARGE_ARTIFACT_TOOL_IDS = Set.of(
-            ChartVisualizationToolPortAdapter.TOOL_ID,
-            NewsletterGenerationToolPortAdapter.TOOL_ID,
-            PptGenerationToolPortAdapter.TOOL_ID,
-            FrontendDesignToolPortAdapter.TOOL_ID);
     private static final String TRACE_CLASS_NAME =
             "com.miracle.ai.seahorse.agent.kernel.application.agent.KernelAgentLoop";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -141,6 +138,8 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
     private final AgentLoopToolExecutor toolExecutor;
     // 任务规划（P3-1）：策略关闭时完全不参与循环，行为与引入前一致。
     private final AgentLoopPlanner planner;
+    // 波次内并行模型轮次（P3-3）：策略关闭时退化为单步串行，行为与引入前一致。
+    private final AgentLoopParallelTurns parallelTurns;
 
     public KernelAgentLoop(AgentLoopDependencies dependencies) {
         AgentLoopDependencies deps = Objects.requireNonNull(dependencies, "dependencies must not be null");
@@ -161,6 +160,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                 modelTurns);
         this.planner = new AgentLoopPlanner(options.taskPlanning(), traceRecorder, runStepRecorder,
                 null, modelPort);
+        this.parallelTurns = new AgentLoopParallelTurns(options.maxParallelSteps());
     }
 
     public AgentLoopResult execute(AgentLoopRequest request) {
@@ -248,18 +248,25 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
         Set<String> exhaustedToolIds = new HashSet<>();
         boolean hasToolObservations = false;
         int maxSteps = Math.min(request.maxSteps(), options.maxSteps());
-        for (int step = 0; step < maxSteps; step++) {
+        List<PlanWave> waves = TaskPlanScheduler.schedule(plan);
+        int step = 0;
+        int waveIndex = 0;
+        while (step < maxSteps) {
             runControl.checkCancelled();
+            int batch = nextBatchSize(waves, waveIndex);
             int stepNo = step + 1;
             String stepId = modelStepId(stepNo);
             Instant stepStartedAt = Instant.now();
             streamEvents.emitStepStarted(callback, request, stepId, stepNo, stepStartedAt);
             TraceNodeScope stepScope = traceRecorder.startNode(traceRunScope, agentStepCommand(stepNo));
             boolean modelTurnRecorded = false;
-            plan = planner.startStep(plan, request, step);
+            plan = startBatch(plan, request, step, batch);
             try {
-                ModelTurn turn = requestModelTurnTraced(
-                        request, messages, runControl, exhaustedToolIds, traceRunScope, stepScope, false);
+                ModelTurn turn = batch == 1
+                        ? requestModelTurnTraced(
+                                request, messages, runControl, exhaustedToolIds, traceRunScope, stepScope, false)
+                        : requestWaveTurns(request, messages, runControl, exhaustedToolIds, traceRunScope,
+                                stepScope, plan, waves.get(waveIndex));
                 recordModelTurn(request, messages, turn, exhaustedToolIds, null);
                 modelTurnRecorded = true;
                 if (turn.toolCalls().isEmpty()) {
@@ -285,7 +292,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                         runControl,
                         traceRunScope,
                         stepScope,
-                        toolEvents(callback));
+                        streamEvents.asToolEvents(callback));
                 markExhaustedTools(turn.toolCalls(), observations, exhaustedToolIds);
                 hasToolObservations = hasToolObservations || !observations.isEmpty();
                 if (requiresApproval(observations)) {
@@ -323,12 +330,15 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                 messages.add(ChatMessage.assistantToolCalls(turn.content(), turn.toolCalls()));
                 for (AgentObservation observation : observations) {
                     messages.add(ChatMessage.tool(observation.toolCallId(),
-                            observationText(observation, toolIdForObservation(turn.toolCalls(), observation))));
+                            AgentObservationText.render(observation,
+                                    AgentObservationText.toolIdFor(turn.toolCalls(), observation))));
                 }
                 streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.SUCCEEDED,
                         null, null);
-                plan = planner.completeStep(plan, request, step);
+                plan = completeBatch(plan, request, step, batch);
                 traceRecorder.finishNode(stepScope);
+                step += batch;
+                waveIndex++;
             } catch (RuntimeException ex) {
                 if (!modelTurnRecorded) {
                     recordModelTurn(request, messages, null, exhaustedToolIds, ex);
@@ -336,7 +346,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                 streamEvents.emitRecoverableError(callback, request, stepId, ex);
                 streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
                         ex, null);
-                plan = planner.failStep(plan, request, step);
+                plan = failBatch(plan, request, step, batch);
                 traceRecorder.finishNode(stepScope, ex);
                 if (hasToolObservations && ModelFailureSanitizer.isModelTurnTimeout(ex)) {
                     return completeWithDegradedFinalAnswer(request, steps, callback, ex);
@@ -397,6 +407,95 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
             if (ModelFailureSanitizer.isModelTurnTimeout(ex)) {
                 return completeWithDegradedFinalAnswer(request, steps, callback, ex);
             }
+            throw ex;
+        }
+    }
+
+    /**
+     * 本轮要推进的步骤数。只有"开启了并行 + 当前波次确实有多个互不依赖的步骤"时才 > 1，
+     * 其余情况恒为 1，与引入并行调度之前完全一致。
+     */
+    private int nextBatchSize(List<PlanWave> waves, int waveIndex) {
+        if (!options.parallelSteps() || waveIndex >= waves.size()) {
+            return 1;
+        }
+        PlanWave wave = waves.get(waveIndex);
+        if (!wave.parallelizable()) {
+            return 1;
+        }
+        return Math.min(wave.size(), options.maxParallelSteps());
+    }
+
+    private TaskPlan startBatch(TaskPlan plan, AgentLoopRequest request, int step, int batch) {
+        TaskPlan updated = plan;
+        for (int offset = 0; offset < batch; offset++) {
+            updated = planner.startStep(updated, request, step + offset);
+        }
+        return updated;
+    }
+
+    private TaskPlan completeBatch(TaskPlan plan, AgentLoopRequest request, int step, int batch) {
+        TaskPlan updated = plan;
+        for (int offset = 0; offset < batch; offset++) {
+            updated = planner.completeStep(updated, request, step + offset);
+        }
+        return updated;
+    }
+
+    private TaskPlan failBatch(TaskPlan plan, AgentLoopRequest request, int step, int batch) {
+        TaskPlan updated = plan;
+        for (int offset = 0; offset < batch; offset++) {
+            updated = planner.failStep(updated, request, step + offset);
+        }
+        return updated;
+    }
+
+    /**
+     * 并发发起一个波次内所有步骤的模型轮次，再合并成一个聚合轮次交给后续的工具执行。
+     *
+     * <p>合并之后，主循环看到的仍然只是"一个轮次"，因此工具执行、观察回灌、审批等待、
+     * 取消与降级这些既有路径都不需要为并行单独分支。代价是这一波只产生一条模型 trace 节点
+     * （各步骤的节点会被并发写坏），排障粒度到"波次"为止——在并行度默认关闭的前提下可以接受。
+     */
+    private ModelTurn requestWaveTurns(AgentLoopRequest request,
+                                       List<ChatMessage> messages,
+                                       AgentRunControl runControl,
+                                       Set<String> exhaustedToolIds,
+                                       TraceRunScope traceRunScope,
+                                       TraceNodeScope stepScope,
+                                       TaskPlan plan,
+                                       PlanWave wave) {
+        List<PlanStep> waveSteps = new ArrayList<>();
+        for (Integer index : wave.stepIndexes()) {
+            PlanStep planned = plan == null ? null : plan.stepAt(index);
+            if (planned != null) {
+                waveSteps.add(planned);
+            }
+        }
+        if (waveSteps.size() <= 1) {
+            return requestModelTurnTraced(
+                    request, messages, runControl, exhaustedToolIds, traceRunScope, stepScope, false);
+        }
+        TraceNodeScope modelScope = traceRecorder.startNode(traceRunScope, new TraceNodeStartCommand(
+                "agent-model-wave",
+                TRACE_TYPE_AGENT_MODEL,
+                TRACE_CLASS_NAME,
+                "requestWaveTurns",
+                stepScope == null ? null : stepScope.nodeId(),
+                1));
+        try {
+            List<ModelTurn> turns = parallelTurns.runTurns(waveSteps, messages, exhaustedToolIds,
+                    (stepMessages, exhausted) ->
+                            modelTurns.requestModelTurn(request, stepMessages, runControl, exhausted));
+            ModelTurn merged = parallelTurns.merge(turns);
+            ModelContextEnvelopeTelemetry.record(traceRecorder, modelScope, merged.contextEvidence());
+            traceRecorder.finishNode(
+                    modelScope, null, ModelContextEnvelopeTelemetry.toJson(merged.contextEvidence()));
+            return merged;
+        } catch (RuntimeException ex) {
+            ModelContextEnvelopeEvidence evidence = ModelContextEnvelopeTelemetry.from(ex);
+            ModelContextEnvelopeTelemetry.record(traceRecorder, modelScope, evidence);
+            traceRecorder.finishNode(modelScope, ex, ModelContextEnvelopeTelemetry.toJson(evidence));
             throw ex;
         }
     }
@@ -465,83 +564,6 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                 exhaustedToolIds.add(toolCalls.get(i).toolId());
             }
         }
-    }
-
-    private String observationText(AgentObservation observation, String toolId) {
-        if (!observation.success()) {
-            return observation.error();
-        }
-        String content = observation.content();
-        if (!LARGE_ARTIFACT_TOOL_IDS.contains(toolId) || content == null || content.isBlank()) {
-            return content;
-        }
-        try {
-            JsonNode root = OBJECT_MAPPER.readTree(content);
-            Map<String, Object> summary = new LinkedHashMap<>();
-            summary.put("status", "ARTIFACT_GENERATED");
-            summary.put("toolId", toolId);
-            summary.put("artifactType", root.path("artifactType").asText(""));
-            summary.put("format", root.path("format").asText(""));
-            String artifactContent = root.path("content").asText("");
-            summary.put("contentPreview", trimForToolContext(artifactContent));
-            summary.put("contentChars", artifactContent.length());
-            summary.put("truncatedForModelContext", artifactContent.length() > TOOL_OBSERVATION_CONTEXT_PREVIEW_LIMIT);
-            return OBJECT_MAPPER.writeValueAsString(summary);
-        } catch (Exception ignored) {
-            return trimForToolContext(content);
-        }
-    }
-
-    private String toolIdForObservation(List<AgentToolCall> toolCalls, AgentObservation observation) {
-        if (toolCalls == null || observation == null) {
-            return "";
-        }
-        for (AgentToolCall toolCall : toolCalls) {
-            if (toolCall != null && observation.toolCallId().equals(toolCall.id())) {
-                return toolCall.toolId();
-            }
-        }
-        return "";
-    }
-
-    private String trimForToolContext(String value) {
-        String safe = Objects.requireNonNullElse(value, "");
-        return safe.length() <= TOOL_OBSERVATION_CONTEXT_PREVIEW_LIMIT
-                ? safe
-                : safe.substring(0, TOOL_OBSERVATION_CONTEXT_PREVIEW_LIMIT);
-    }
-
-    private AgentLoopToolExecutor.ToolEvents toolEvents(StreamCallback callback) {
-        return new AgentLoopToolExecutor.ToolEvents() {
-            @Override
-            public void toolCallStarted(AgentLoopRequest request, AgentToolCall toolCall) {
-                streamEvents.emitToolCallStarted(callback, request, toolCall);
-            }
-
-            @Override
-            public void toolCallFinished(
-                    AgentLoopRequest request,
-                    AgentToolCall toolCall,
-                    AgentObservation observation) {
-                streamEvents.emitToolCallFinished(callback, request, toolCall, observation);
-            }
-
-            @Override
-            public void toolCallWaitingUser(
-                    AgentLoopRequest request,
-                    AgentToolCall toolCall,
-                    AgentObservation observation) {
-                streamEvents.emitToolCallWaitingUser(callback, request, toolCall, observation);
-            }
-
-            @Override
-            public void skillResourceLoaded(
-                    AgentLoopRequest request,
-                    AgentToolCall toolCall,
-                    AgentObservation observation) {
-                streamEvents.emitSkillResourceLoaded(callback, request, toolCall, observation);
-            }
-        };
     }
 
     private String modelStepId(int stepNo) {

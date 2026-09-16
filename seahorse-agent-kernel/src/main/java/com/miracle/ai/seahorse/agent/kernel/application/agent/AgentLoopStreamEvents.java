@@ -322,6 +322,45 @@ final class AgentLoopStreamEvents {
         }
     }
 
+    /**
+     * 把流式发射能力适配成工具执行器需要的回调接口。
+     *
+     * <p>工具执行器在 worker 线程里回调这些钩子，但真正的 {@code callback.onEvent} 由
+     * 各工具批次在主线程调用；这里只做转发，不引入额外状态。
+     */
+    AgentLoopToolExecutor.ToolEvents asToolEvents(StreamCallback callback) {
+        return new AgentLoopToolExecutor.ToolEvents() {
+            @Override
+            public void toolCallStarted(AgentLoopRequest request, AgentToolCall toolCall) {
+                emitToolCallStarted(callback, request, toolCall);
+            }
+
+            @Override
+            public void toolCallFinished(
+                    AgentLoopRequest request,
+                    AgentToolCall toolCall,
+                    AgentObservation observation) {
+                emitToolCallFinished(callback, request, toolCall, observation);
+            }
+
+            @Override
+            public void toolCallWaitingUser(
+                    AgentLoopRequest request,
+                    AgentToolCall toolCall,
+                    AgentObservation observation) {
+                emitToolCallWaitingUser(callback, request, toolCall, observation);
+            }
+
+            @Override
+            public void skillResourceLoaded(
+                    AgentLoopRequest request,
+                    AgentToolCall toolCall,
+                    AgentObservation observation) {
+                emitSkillResourceLoaded(callback, request, toolCall, observation);
+            }
+        };
+    }
+
     private boolean isApprovalRequired(AgentObservation observation) {
         return observation != null
                 && !observation.success()
