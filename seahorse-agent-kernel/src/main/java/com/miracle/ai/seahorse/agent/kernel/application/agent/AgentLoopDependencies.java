@@ -22,6 +22,7 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentAppro
 import com.miracle.ai.seahorse.agent.kernel.application.agent.runtime.AgentRunStepRecorder;
 import com.miracle.ai.seahorse.agent.kernel.application.memory.DefaultContextWeaver;
 import com.miracle.ai.seahorse.agent.kernel.application.trace.KernelRagTraceRecorder;
+import com.miracle.ai.seahorse.agent.ports.outbound.agent.AgentCheckpointRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolGatewayPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.agent.ToolRegistryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.KeyValueCachePort;
@@ -50,7 +51,8 @@ public record AgentLoopDependencies(
         ToolCallParser toolCallParser,
         TokenCounterPort tokenCounter,
         ModelContextWindowPort modelContextWindow,
-        KeyValueCachePort contextCalibrationCache) {
+        KeyValueCachePort contextCalibrationCache,
+        AgentCheckpointRepositoryPort checkpointRepository) {
 
     public AgentLoopDependencies {
         modelPort = Objects.requireNonNull(modelPort, "modelPort must not be null");
@@ -71,6 +73,33 @@ public record AgentLoopDependencies(
         modelContextWindow = Objects.requireNonNullElseGet(modelContextWindow,
                 () -> ModelContextWindowPort.strictConfigured(
                         java.util.Map.of(), "kernel-unconfigured"));
+        checkpointRepository = Objects.requireNonNullElseGet(
+                checkpointRepository, AgentCheckpointRepositoryPort::empty);
+    }
+
+    /**
+     * 兼容构造：未显式提供 checkpoint 仓储时按"不落盘"处理，行为与引入续跑能力前一致。
+     */
+    public AgentLoopDependencies(
+            StreamingChatModelPort modelPort,
+            ToolRegistryPort toolRegistry,
+            ToolGatewayPort toolGateway,
+            KernelAgentLoopOptions options,
+            KernelRagTraceRecorder traceRecorder,
+            ContextWeaverPort contextWeaver,
+            AgentRunStepRecorder runStepRecorder,
+            AgentApprovalWaitHandler approvalWaitHandler,
+            OutputGovernanceService outputGovernance,
+            MarkdownNormalizer markdownNormalizer,
+            AgentStreamEmitter streamEmitter,
+            ToolCallParser toolCallParser,
+            TokenCounterPort tokenCounter,
+            ModelContextWindowPort modelContextWindow,
+            KeyValueCachePort contextCalibrationCache) {
+        this(modelPort, toolRegistry, toolGateway, options, traceRecorder, contextWeaver,
+                runStepRecorder, approvalWaitHandler, outputGovernance, markdownNormalizer,
+                streamEmitter, toolCallParser, tokenCounter, modelContextWindow,
+                contextCalibrationCache, null);
     }
 
     public AgentLoopDependencies(
@@ -127,6 +156,7 @@ public record AgentLoopDependencies(
                 .maxParallelTools(safe.maxParallelTools())
                 .parallelSteps(safe.parallelSteps())
                 .maxParallelSteps(safe.maxParallelSteps())
+                .checkpointResume(safe.checkpointResume())
                 .contextEnvelope(envelope)
                 .taskPlanning(safe.taskPlanning())
                 .build();

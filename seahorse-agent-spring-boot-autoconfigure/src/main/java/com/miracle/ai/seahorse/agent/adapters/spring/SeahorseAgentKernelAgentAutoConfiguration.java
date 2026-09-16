@@ -184,6 +184,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
     private static final String PROP_MAX_PARALLEL_TOOLS = "seahorse-agent.chat.agent.max-parallel-tools";
     private static final String PROP_PARALLEL_STEPS = "seahorse-agent.chat.agent.parallel-steps";
     private static final String PROP_MAX_PARALLEL_STEPS = "seahorse-agent.chat.agent.max-parallel-steps";
+    private static final String PROP_CHECKPOINT_RESUME = "seahorse-agent.chat.agent.checkpoint-resume";
     private static final String PROP_CONTEXT_ENVELOPE_PREFIX =
             "seahorse-agent.chat.agent.context-envelope";
     private static final String PROP_MCP_INCLUDE = "seahorse-agent.chat.agent.tools.mcp.include";
@@ -280,6 +281,7 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 .maxParallelTools(environment.getProperty(PROP_MAX_PARALLEL_TOOLS, Integer.class, 1))
                 .parallelSteps(environment.getProperty(PROP_PARALLEL_STEPS, Boolean.class, Boolean.FALSE))
                 .maxParallelSteps(environment.getProperty(PROP_MAX_PARALLEL_STEPS, Integer.class, 2))
+                .checkpointResume(environment.getProperty(PROP_CHECKPOINT_RESUME, Boolean.class, Boolean.FALSE))
                 .contextEnvelope(new ModelContextEnvelopeOptions(
                         ModelContextEnvelopeOptions.Mode.parse(environment.getProperty(
                                 PROP_CONTEXT_ENVELOPE_PREFIX + ".mode", "ENFORCE")),
@@ -379,7 +381,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
             ModelContextWindowPort modelContextWindowPort,
             MarkdownNormalizer markdownNormalizer,
             AgentStreamEmitter streamEmitter,
-            ToolCallParser toolCallParser) {
+            ToolCallParser toolCallParser,
+            ObjectProvider<AgentCheckpointRepositoryPort> checkpointRepository) {
         ToolRegistryPort registry = toolRegistry.getIfAvailable(ToolRegistryPort::empty);
         return new AgentLoopDependencies(
                 modelPort,
@@ -396,7 +399,8 @@ public class SeahorseAgentKernelAgentAutoConfiguration {
                 toolCallParser,
                 tokenCounterPort.getIfAvailable(TokenCounterPort::approximate),
                 modelContextWindowPort,
-                contextCalibrationCache.getIfAvailable());
+                contextCalibrationCache.getIfAvailable(),
+                checkpointRepository.getIfAvailable());
     }
 
     @Bean

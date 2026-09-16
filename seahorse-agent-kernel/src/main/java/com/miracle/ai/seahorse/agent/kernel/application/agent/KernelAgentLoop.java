@@ -70,6 +70,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -140,6 +141,9 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
     private final AgentLoopPlanner planner;
     // 波次内并行模型轮次（P3-3）：策略关闭时退化为单步串行，行为与引入前一致。
     private final AgentLoopParallelTurns parallelTurns;
+    // 长时程续跑（P2-4）：开关关闭时完全不落盘、不读取，行为与引入前一致。
+    private final AgentLoopCheckpoints checkpoints;
+    private final AgentLoopRunRecorder runRecorder;
 
     public KernelAgentLoop(AgentLoopDependencies dependencies) {
         AgentLoopDependencies deps = Objects.requireNonNull(dependencies, "dependencies must not be null");
@@ -161,6 +165,9 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
         this.planner = new AgentLoopPlanner(options.taskPlanning(), traceRecorder, runStepRecorder,
                 null, modelPort);
         this.parallelTurns = new AgentLoopParallelTurns(options.maxParallelSteps());
+        this.checkpoints = new AgentLoopCheckpoints(
+                deps.checkpointRepository(), OBJECT_MAPPER, Clock.systemUTC(), options.checkpointResume());
+        this.runRecorder = new AgentLoopRunRecorder(runStepRecorder, modelTurns);
     }
 
     public AgentLoopResult execute(AgentLoopRequest request) {
@@ -234,24 +241,30 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                                 TraceRunScope traceRunScope) {
         Objects.requireNonNull(request, "AgentLoopRequest must not be null");
         AgentRunControl runControl = Objects.requireNonNullElseGet(control, AgentRunControl::direct);
-        List<ChatMessage> messages = new ArrayList<>(request.history());
+        AgentLoopCheckpoints.ResumeState resumed = checkpoints.load(request.runId());
+        List<ChatMessage> messages = new ArrayList<>(
+                resumed.present() ? resumed.messages() : request.history());
         if (modelTurns.usesLegacyContextAssembly()) {
             modelTurns.installLegacyRuntimeContext(request, messages);
         }
         streamEvents.emitSkillRuntimeEvents(callback, request);
         TaskPlan plan = planner.planRun(request, traceRunScope,
                 Math.min(request.maxSteps(), options.maxSteps()));
-        planner.appendPlan(plan, messages);
-        messages.add(ChatMessage.user(request.question()));
+        if (!resumed.present()) {
+            planner.appendPlan(plan, messages);
+            messages.add(ChatMessage.user(request.question()));
+        }
 
         List<AgentStep> steps = new ArrayList<>();
-        Set<String> exhaustedToolIds = new HashSet<>();
+        Set<String> exhaustedToolIds = new HashSet<>(resumed.exhaustedToolIds());
         boolean hasToolObservations = false;
         int maxSteps = Math.min(request.maxSteps(), options.maxSteps());
         List<PlanWave> waves = TaskPlanScheduler.schedule(plan);
-        int step = 0;
+        // 每次调用都拿到一整份新预算：maxSteps 约束的是单次调用的推理开销，而不是任务总时长。
+        int step = resumed.completedSteps();
+        int horizon = step + maxSteps;
         int waveIndex = 0;
-        while (step < maxSteps) {
+        while (step < horizon) {
             runControl.checkCancelled();
             int batch = nextBatchSize(waves, waveIndex);
             int stepNo = step + 1;
@@ -267,7 +280,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                                 request, messages, runControl, exhaustedToolIds, traceRunScope, stepScope, false)
                         : requestWaveTurns(request, messages, runControl, exhaustedToolIds, traceRunScope,
                                 stepScope, plan, waves.get(waveIndex));
-                recordModelTurn(request, messages, turn, exhaustedToolIds, null);
+                runRecorder.recordModelTurn(request, messages, turn, exhaustedToolIds, null);
                 modelTurnRecorded = true;
                 if (turn.toolCalls().isEmpty()) {
                     String finalContent = markdownNormalizer.normalizeFinalMarkdown(
@@ -339,9 +352,10 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
                 traceRecorder.finishNode(stepScope);
                 step += batch;
                 waveIndex++;
+                checkpoints.saveStepBoundary(request.runId(), step, messages, exhaustedToolIds);
             } catch (RuntimeException ex) {
                 if (!modelTurnRecorded) {
-                    recordModelTurn(request, messages, null, exhaustedToolIds, ex);
+                    runRecorder.recordModelTurn(request, messages, null, exhaustedToolIds, ex);
                 }
                 streamEvents.emitRecoverableError(callback, request, stepId, ex);
                 streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
@@ -356,7 +370,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
         }
         if (hasToolObservations) {
             AgentLoopResult finalResult = requestFinalAnswerAfterToolSteps(
-                    request, messages, steps, runControl, callback, traceRunScope, maxSteps + 1);
+                    request, messages, steps, runControl, callback, traceRunScope, horizon + 1);
             if (finalResult != null) {
                 return finalResult;
             }
@@ -381,7 +395,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
         try {
             ModelTurn turn = requestModelTurnTraced(
                     request, messages, runControl, Set.of(), traceRunScope, stepScope, true);
-            recordModelTurn(request, messages, turn, Set.of(), null);
+            runRecorder.recordModelTurn(request, messages, turn, Set.of(), null);
             if (!turn.toolCalls().isEmpty()) {
                 streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
                         null, "Final answer turn attempted to call tools.");
@@ -399,7 +413,7 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
             traceRecorder.finishNode(stepScope);
             return new AgentLoopResult(finalContent, steps, false);
         } catch (RuntimeException ex) {
-            recordModelTurn(request, messages, null, Set.of(), ex);
+            runRecorder.recordModelTurn(request, messages, null, Set.of(), ex);
             streamEvents.emitRecoverableError(callback, request, stepId, ex);
             streamEvents.emitStepFinished(callback, request, stepId, stepNo, stepStartedAt, AgentStepStatus.FAILED,
                     ex, null);
@@ -570,58 +584,11 @@ public class KernelAgentLoop implements ReActExecutorPort, AgentFinalModelTurnPo
         return MODEL_STEP_ID_PREFIX + stepNo;
     }
 
-    private void recordModelTurn(AgentLoopRequest request,
-                                 List<ChatMessage> messages,
-                                 ModelTurn turn,
-                                 Set<String> exhaustedToolIds,
-                                 Throwable error) {
-        try {
-            ModelContextEnvelopeEvidence evidence = turn == null
-                    ? ModelContextEnvelopeTelemetry.from(error)
-                    : turn.contextEvidence();
-            String inputJson;
-            if (evidence != null) {
-                inputJson = evidence.toJson();
-            } else {
-                List<?> tools = List.of();
-                try {
-                    tools = modelTurns.exposedTools(modelTurns.effectiveAllowedToolIds(request),
-                            request.skillRuntimeBlocks(), exhaustedToolIds);
-                } catch (RuntimeException registryError) {
-                    LOG.warn("Failed to resolve tools while recording model turn: runId={}",
-                            request.runId(), registryError);
-                }
-                inputJson = AgentRunStepRecorder.modelTurnInput(messages, tools);
-            }
-            runStepRecorder.recordModelTurn(
-                    request.runId(),
-                    inputJson,
-                    turn == null ? null : modelTurnOutputJson(turn),
-                    error);
-        } catch (RuntimeException recorderError) {
-            LOG.warn("Failed to record model turn without changing model execution semantics: runId={}",
-                    request.runId(), recorderError);
-        }
-    }
-
     private String effectiveModelId(AgentLoopRequest request, ModelTurn turn) {
         if (turn != null && turn.contextEvidence() != null) {
             return turn.contextEvidence().modelId();
         }
         return request.modelId();
-    }
-
-    private String modelTurnOutputJson(ModelTurn turn) {
-        Map<String, Object> output = new LinkedHashMap<>();
-        output.put("content", turn.content());
-        output.put("thinkingPresent", !turn.thinking().isBlank());
-        output.put("thinkingChars", turn.thinking().codePointCount(0, turn.thinking().length()));
-        output.put("toolCallCount", turn.toolCalls().size());
-        try {
-            return OBJECT_MAPPER.writeValueAsString(output);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
-            throw new IllegalStateException("serialize model turn output failed", ex);
-        }
     }
 
     private String applyOutputGovernance(AgentLoopRequest request, String originalContent) {

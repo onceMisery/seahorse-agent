@@ -33,6 +33,7 @@ public final class KernelAgentLoopOptions {
     private static final int DEFAULT_MAX_PARALLEL_TOOLS = 1;
     private static final boolean DEFAULT_PARALLEL_STEPS = false;
     private static final int DEFAULT_MAX_PARALLEL_STEPS = 2;
+    private static final boolean DEFAULT_CHECKPOINT_RESUME = false;
 
     private final int maxSteps;
     private final Duration perToolTimeout;
@@ -40,6 +41,7 @@ public final class KernelAgentLoopOptions {
     private final int maxParallelTools;
     private final boolean parallelSteps;
     private final int maxParallelSteps;
+    private final boolean checkpointResume;
     private final ModelContextEnvelopeOptions contextEnvelope;
     private final TaskPlanningPolicy taskPlanning;
 
@@ -67,6 +69,7 @@ public final class KernelAgentLoopOptions {
         this.maxParallelTools = b.maxParallelTools;
         this.parallelSteps = b.parallelSteps;
         this.maxParallelSteps = b.maxParallelSteps;
+        this.checkpointResume = b.checkpointResume;
         this.contextEnvelope = Objects.requireNonNullElseGet(
                 b.contextEnvelope, ModelContextEnvelopeOptions::defaults);
         this.taskPlanning = Objects.requireNonNullElseGet(b.taskPlanning, TaskPlanningPolicy::defaults);
@@ -107,6 +110,13 @@ public final class KernelAgentLoopOptions {
     }
 
     /**
+     * @return 是否开启长时程续跑：每轮迭代落检查点，并用同一 runId 的下一次调用从断点继续，默认 false
+     */
+    public boolean checkpointResume() {
+        return checkpointResume;
+    }
+
+    /**
      * @return 任务规划策略，默认关闭（{@link TaskPlanningPolicy#defaults()}）
      */
     public TaskPlanningPolicy taskPlanning() {
@@ -128,6 +138,7 @@ public final class KernelAgentLoopOptions {
         private int maxParallelTools = DEFAULT_MAX_PARALLEL_TOOLS;
         private boolean parallelSteps = DEFAULT_PARALLEL_STEPS;
         private int maxParallelSteps = DEFAULT_MAX_PARALLEL_STEPS;
+        private boolean checkpointResume = DEFAULT_CHECKPOINT_RESUME;
         private ModelContextEnvelopeOptions contextEnvelope = ModelContextEnvelopeOptions.defaults();
         private TaskPlanningPolicy taskPlanning = TaskPlanningPolicy.defaults();
 
@@ -158,6 +169,11 @@ public final class KernelAgentLoopOptions {
 
         public Builder maxParallelSteps(int maxParallelSteps) {
             this.maxParallelSteps = maxParallelSteps;
+            return this;
+        }
+
+        public Builder checkpointResume(boolean checkpointResume) {
+            this.checkpointResume = checkpointResume;
             return this;
         }
 

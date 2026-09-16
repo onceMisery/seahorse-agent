@@ -21,5 +21,12 @@ public enum AgentCheckpointType {
     MODEL_TURN,
     BEFORE_TOOL,
     AFTER_TOOL,
-    WAITING_APPROVAL
+    WAITING_APPROVAL,
+    /**
+     * 步骤边界：一轮 ReAct 迭代成功结束后落盘，用于把长时程任务拆成多次调用续跑。
+     *
+     * <p>与 {@link #WAITING_APPROVAL} 的区别在于它不等待任何外部事件——
+     * 调用方可以在任意时刻带着同一个 runId 再次发起执行，循环会从断点继续。
+     */
+    STEP_BOUNDARY
 }
