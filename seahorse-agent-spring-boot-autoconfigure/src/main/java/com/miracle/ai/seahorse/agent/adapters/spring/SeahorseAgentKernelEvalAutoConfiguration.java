@@ -24,9 +24,11 @@ import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalCan
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalDecisionFacade;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.KernelEvalRegressionService;
 import com.miracle.ai.seahorse.agent.adapters.web.RateLimitFilter;
+import com.miracle.ai.seahorse.agent.adapters.spring.properties.LearningLoopProperties;
 import com.miracle.ai.seahorse.agent.adapters.spring.properties.RoutingProperties;
 import com.miracle.ai.seahorse.agent.kernel.application.agent.routing.ModelRoutingPolicy;
 import com.miracle.ai.seahorse.agent.kernel.application.conversation.ConversationAttachmentParserService;
+import com.miracle.ai.seahorse.agent.kernel.application.learning.KernelLearningLoopService;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
@@ -59,7 +61,7 @@ import org.springframework.core.env.Environment;
         SeahorseAgentKernelChatAutoConfiguration.class,
         SeahorseAgentAiAdapterAutoConfiguration.class
 })
-@EnableConfigurationProperties(RoutingProperties.class)
+@EnableConfigurationProperties({RoutingProperties.class, LearningLoopProperties.class})
 @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
         matchIfMissing = true)
 public class SeahorseAgentKernelEvalAutoConfiguration {
@@ -118,6 +120,16 @@ public class SeahorseAgentKernelEvalAutoConfiguration {
             KernelEvalCandidateDecisionService decisionService,
             KernelEvalRegressionService regressionService) {
         return new KernelEvalDecisionFacade(decisionService, regressionService);
+    }
+
+    /**
+     * 自学习闭环（P3-2）。刻意没有配套的"自动执行器"：本服务只产出带证据的调整建议，
+     * 落地与否由人决定，避免无人值守地改动生产阈值。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public KernelLearningLoopService seahorseKernelLearningLoopService(LearningLoopProperties properties) {
+        return new KernelLearningLoopService(properties == null ? null : properties.toPolicy());
     }
 
     @Bean
