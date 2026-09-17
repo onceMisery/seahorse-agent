@@ -17,13 +17,24 @@
 
 package com.miracle.ai.seahorse.agent.adapters.spring;
 
+import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalDatasetQueryPort;
+import com.miracle.ai.seahorse.agent.kernel.application.agent.eval.EvalSample;
 import com.miracle.ai.seahorse.agent.kernel.application.learning.KernelLearningLoopService;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopRunResult;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.ReviewMeasurement;
+import com.miracle.ai.seahorse.agent.kernel.domain.chat.ChatRequest;
 import com.miracle.ai.seahorse.agent.ports.inbound.learning.PolicyAdjustmentTicketManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.model.ChatModelPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -78,5 +89,123 @@ class SeahorseAgentKernelEvalLearningLoopAutoConfigurationTests {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(KernelLearningLoopService.class);
                 });
+    }
+
+    // ------------------------------------------------------------------
+    // 定时回访的测量来源接线
+    // ------------------------------------------------------------------
+
+    @Test
+    void shouldNotRegisterReviewJobWhenNoCronIsConfigured() {
+        contextRunner.run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context).doesNotHaveBean(SeahorseLearningLoopReviewJob.class);
+        });
+    }
+
+    @Test
+    void shouldPreferTheExplicitlyRegisteredMeasurementSource() {
+        contextRunner
+                .withPropertyValues("seahorse-agent.learning-loop.review-cron=" + CRON)
+                .withUserConfiguration(ExplicitMeasurementSourceConfig.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    SeahorseLearningLoopReviewJob job =
+                            context.getBean(SeahorseLearningLoopReviewJob.class);
+                    assertThat(job.measurementSource())
+                            .isSameAs(ExplicitMeasurementSourceConfig.SOURCE);
+                });
+    }
+
+    @Test
+    void shouldFallBackToTheEvalSourceWhenNoExplicitBeanExists() {
+        contextRunner
+                .withPropertyValues("seahorse-agent.learning-loop.review-cron=" + CRON)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    SeahorseLearningLoopReviewJob job =
+                            context.getBean(SeahorseLearningLoopReviewJob.class);
+
+                    assertThat(job.measurementSource())
+                            .isInstanceOf(SeahorseEvalReviewMeasurementSource.class);
+                    // 没接评测也没配数据集：降级为不可测量，且不能抛异常——
+                    // 否则一个没配全的 cron 会让定时任务每轮都往监控里刷栈
+                    assertThat(job.measurementSource().apply("default").measurable()).isFalse();
+                });
+    }
+
+    @Test
+    void shouldObtainComparableRatesThroughTheDefaultSourceOnceEvalIsBound() {
+        contextRunner
+                .withPropertyValues(
+                        "seahorse-agent.learning-loop.review-cron=" + CRON,
+                        "seahorse-agent.learning-loop.review-dataset-id=ds-benchmark",
+                        "seahorse-agent.learning-loop.review-model-id=model-a",
+                        "seahorse-agent.learning-loop.review-baseline-pass-rate=0.60")
+                .withUserConfiguration(EvalBackendConfig.class)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    SeahorseLearningLoopReviewJob job =
+                            context.getBean(SeahorseLearningLoopReviewJob.class);
+
+                    ReviewMeasurement measurement = job.measurementSource().apply("default");
+
+                    // 这条要证明的是"配齐之后 job 独立运行也能拿到数据"——
+                    // 此前 job 只能拿到不可测量，配了 cron 也只是每轮空转
+                    assertThat(measurement.measurable()).isTrue();
+                    assertThat(measurement.baselinePassRate()).isEqualTo(0.60D);
+                    assertThat(measurement.currentPassRate()).isEqualTo(0.75D);
+                });
+    }
+
+    private static final String CRON = "0 0 3 * * *";
+
+    @Configuration(proxyBeanMethods = false)
+    static class ExplicitMeasurementSourceConfig {
+
+        static final Function<String, ReviewMeasurement> SOURCE =
+                tenantId -> ReviewMeasurement.of(0.10D, 0.90D, "explicit-bean");
+
+        @Bean
+        Function<String, ReviewMeasurement> explicitMeasurementSource() {
+            return SOURCE;
+        }
+    }
+
+    /**
+     * 一个最小的评测后端：4 条样本、前 3 条命中预期，因此当前通过率是 0.75。
+     *
+     * <p>提供 {@link EvalDatasetQueryPort} 与 {@link ChatModelPort} 是为了让
+     * {@code KernelEvalRegressionService} 的条件装配成立——默认测量来源依赖它，
+     * 它不注册的话整条回退链就只剩"不可测量"。
+     */
+    @Configuration(proxyBeanMethods = false)
+    static class EvalBackendConfig {
+
+        static final String DATASET_ID = "ds-benchmark";
+        static final String EXPECTED = "alpha beta gamma";
+
+        @Bean
+        EvalDatasetQueryPort evalDatasetQueryPort() {
+            List<EvalSample> samples = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                samples.add(new EvalSample(
+                        "sample-" + i, DATASET_ID, "query-" + i, EXPECTED, null, null));
+            }
+            return datasetId -> samples;
+        }
+
+        @Bean
+        ChatModelPort chatModelPort() {
+            return (ChatRequest request, String modelId) -> {
+                String content = request.getMessages().isEmpty()
+                        ? ""
+                        : String.valueOf(request.getMessages().get(0).getContent());
+                int index = content.startsWith("query-")
+                        ? Integer.parseInt(content.substring("query-".length()))
+                        : Integer.MAX_VALUE;
+                return index < 3 ? EXPECTED : "zzz qqq xxx";
+            };
+        }
     }
 }

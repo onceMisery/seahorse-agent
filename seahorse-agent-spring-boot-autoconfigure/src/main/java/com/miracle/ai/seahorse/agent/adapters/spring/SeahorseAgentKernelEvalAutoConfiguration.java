@@ -179,9 +179,14 @@ public class SeahorseAgentKernelEvalAutoConfiguration {
      * 回访的定时兜底任务。<b>只有配了 {@code seahorse-agent.learning-loop.review-cron} 才装配</b>——
      * 回访的默认触发方式是"跑一次闭环时顺带回访"，定时只是给长期没人跑闭环的场景兜底。
      *
-     * <p>测量来源做成可替换的 Bean：内核没有评测数据源的端口，这里不给它硬塞一个，
-     * 而是让接入了评测系统的适配层提供一个 {@code Function<String, ReviewMeasurement>}；
-     * 没有提供时默认"不可测量"，回访会被跳过而不是写出一堆无信息量的记录。
+     * <p>测量来源的优先级：<b>接入方显式注册的 {@code Function<String, ReviewMeasurement>} Bean</b>
+     * ＞ <b>默认评测来源</b>（跑一次 {@code KernelEvalRegressionService} 取通过率）
+     * ＞ 不可测量。
+     *
+     * <p>最初只有"不可测量"这一档兜底，结果 job 独立运行时永远拿不到数据——它没有调用方，
+     * 配了 cron 也只是每轮空转。默认来源补的就是这个缺口；但它需要显式配置
+     * {@code review-dataset-id} 与 {@code review-model-id} 才会真的跑评测，
+     * 否则仍然降级为不可测量，不会偷偷发起一次全量回归。
      */
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
@@ -191,11 +196,22 @@ public class SeahorseAgentKernelEvalAutoConfiguration {
             PolicyAdjustmentTicketManagementInboundPort ticketPort,
             ObjectProvider<java.util.function.Function<String,
                     com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.ReviewMeasurement>> measurementSource,
+            ObjectProvider<KernelEvalRegressionService> regressionService,
             ObjectProvider<DistributedLockPort> lockPort,
             LearningLoopProperties properties) {
+        java.util.function.Function<String,
+                com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.ReviewMeasurement> explicit =
+                measurementSource.getIfAvailable();
+        if (explicit == null) {
+            explicit = new SeahorseEvalReviewMeasurementSource(
+                    regressionService.getIfAvailable(),
+                    properties == null ? null : properties.getReviewDatasetId(),
+                    properties == null ? null : properties.getReviewModelId(),
+                    properties == null ? null : properties.getReviewBaselinePassRate());
+        }
         return new SeahorseLearningLoopReviewJob(
                 ticketPort,
-                measurementSource.getIfAvailable(),
+                explicit,
                 lockPort.getIfAvailable(DistributedLockPort::noop),
                 properties == null || properties.getReviewTenantId() == null
                         ? "default" : properties.getReviewTenantId(),

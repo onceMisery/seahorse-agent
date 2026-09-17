@@ -1,0 +1,5 @@
+# Vite 在运行测试/构建时会把 config 编译成带时间戳的临时文件再加载。
+# 正常退出会自行清理，但被中断或并发运行后会残留，且每次文件名都不同，
+# 不忽略的话会以 untracked 形态不断堆积在 git status 里。
+vite.config.ts.timestamp-*.mjs
+vitest.config.ts.timestamp-*.mjs

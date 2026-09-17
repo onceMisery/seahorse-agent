@@ -82,12 +82,25 @@ public class SeahorseLearningLoopReviewJob {
         }
         try {
             ReviewMeasurement measurement = measurementSource.apply(tenantId);
+            if (measurement == null || !measurement.measurable()) {
+                // 取不到测量值时内核会返回 empty(note)，但那句 note 不说是"哪个来源没取到"，
+                // 这里把来源补上，否则配了 cron 却什么都不发生会无从下手
+                LOG.warn("Learning loop review has no comparable measurement: source={}, tenantId={}",
+                        measurement == null ? "none" : measurement.source(), tenantId);
+            }
             PolicyAdjustmentTicketReviewRunResult result = ticketPort.reviewAppliedTickets(
                     tenantId, batchId(), measurement);
             if (result == null) {
                 return;
             }
-            LOG.info("Learning loop review job finished: {}", result.note());
+            if (result.reviews().isEmpty()) {
+                // "一条都没写"必须能看出来是没数据、没工单、还是都在冷却期里
+                LOG.warn("Learning loop review wrote nothing: note={}, scanned={}, skipped={}, tenantId={}",
+                        result.note(), result.scanned(), result.skipped(), tenantId);
+                return;
+            }
+            LOG.info("Learning loop review job finished: {} (written={}, scanned={}, skipped={})",
+                    result.note(), result.reviews().size(), result.scanned(), result.skipped());
             if (result.hasRollbackRecommendation()) {
                 LOG.warn("Learning loop review recommends rollback for {} applied ticket(s); "
                         + "tickets stay APPLIED until a human confirms the config rollback",
@@ -101,6 +114,17 @@ public class SeahorseLearningLoopReviewJob {
         } finally {
             lockPort.unlock(LOCK_NAME);
         }
+    }
+
+    /**
+     * 实际生效的测量来源，供装配测试断言优先级。
+     *
+     * <p>优先级发生在装配层（显式 Bean ＞ 默认评测来源），而装配层的选择没有别的
+     * 可观测出口——不加这个访问器，"显式 Bean 是否真的优先"就只能靠读代码确认，
+     * 一旦有人调换两个分支的顺序，没有任何测试会红。
+     */
+    Function<String, ReviewMeasurement> measurementSource() {
+        return measurementSource;
     }
 
     /** 按小时分桶：同小时内重复执行共享同一个 batchId，从而在唯一索引上被去重。 */

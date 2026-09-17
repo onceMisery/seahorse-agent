@@ -51,6 +51,22 @@ public class LearningLoopProperties {
     private String reviewCron;
     /** 定时任务回访哪个租户，默认 default。 */
     private String reviewTenantId;
+    /**
+     * 定时回访取"当前通过率"所用的评测数据集。
+     *
+     * <p>留空则默认测量源判定为"不可测量"，回访会被跳过而不是写出无信息量的记录。
+     * 想让定时回访真的能得出结论，这里与 {@link #reviewModelId} 都要配。
+     */
+    private String reviewDatasetId;
+    /** 定时回访跑评测所用的模型。留空同上。 */
+    private String reviewModelId;
+    /**
+     * 定时回访的基线通过率。
+     *
+     * <p>留空时默认测量源会尝试用它拿不到的其他来源；都没有就判定不可测量——
+     * 没有基线的"当前通过率"无法判断到底是改进还是回归。
+     */
+    private Double reviewBaselinePassRate;
 
     public Integer getMinSamples() {
         return minSamples;
@@ -122,6 +138,30 @@ public class LearningLoopProperties {
 
     public void setReviewTenantId(String reviewTenantId) {
         this.reviewTenantId = reviewTenantId;
+    }
+
+    public String getReviewDatasetId() {
+        return reviewDatasetId;
+    }
+
+    public void setReviewDatasetId(String reviewDatasetId) {
+        this.reviewDatasetId = reviewDatasetId;
+    }
+
+    public String getReviewModelId() {
+        return reviewModelId;
+    }
+
+    public void setReviewModelId(String reviewModelId) {
+        this.reviewModelId = reviewModelId;
+    }
+
+    public Double getReviewBaselinePassRate() {
+        return reviewBaselinePassRate;
+    }
+
+    public void setReviewBaselinePassRate(Double reviewBaselinePassRate) {
+        this.reviewBaselinePassRate = reviewBaselinePassRate;
     }
 
     public LearningLoopPolicy toPolicy() {
