@@ -69,6 +69,8 @@ public class SeahorseSecurityWebMvcConfiguration implements WebMvcConfigurer {
             "/mappings",
             "/metadata-quarantine/",
             "/metadata-review/",
+            // 策略调整会改变生产流量分布，属于管理员动作
+            "/api/policy-adjustment-tickets/",
             "/rag/traces",
             "/sample-questions",
             "/agents");

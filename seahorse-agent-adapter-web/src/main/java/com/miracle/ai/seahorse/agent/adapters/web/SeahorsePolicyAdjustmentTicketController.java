@@ -19,10 +19,15 @@ package com.miracle.ai.seahorse.agent.adapters.web;
 
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopReport;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicket;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketBatchDecisionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketNotFoundException;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketDecision;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketReview;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketReviewRunResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.ReviewMeasurement;
 import com.miracle.ai.seahorse.agent.ports.inbound.learning.PolicyAdjustmentTicketManagementInboundPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketPage;
 import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketQuery;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +37,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * 策略调整落地工单的查询与审批 API。
@@ -50,6 +58,10 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>{@code 409 CONFLICT} —— 工单已被其他审批人改动，需重新加载后再决策。</li>
  * </ul>
  *
+ * <p><b>批量审批的失败语义是刻意不同的</b>：{@code /batch-approve} 与 {@code /batch-reject}
+ * 在部分失败时仍返回 {@code 200}，失败明细放在响应的 {@code failed} 数组里。
+ * 整批抛异常会让一次误操作毁掉整批，前端也拿不到"到底哪几张失败了"。
+ *
  * <p>字段命名：全部 camelCase，与 {@code PolicyAdjustmentTicket} record 一致，
  * 未启用任何 Jackson 命名策略，前端可直接使用。
  */
@@ -67,6 +79,10 @@ public class SeahorsePolicyAdjustmentTicketController {
         this.ticketPortProvider = ticketPortProvider;
     }
 
+    /**
+     * 工单分页。响应额外带上本页每张工单<b>最近一次回访</b>——回访结论若只在详情里可见，
+     * 被判定为"建议回滚"的工单就永远没人发现。
+     */
     @GetMapping("/api/policy-adjustment-tickets")
     public ApiResponse<Object> page(@RequestParam(required = false) String tenantId,
                                     @RequestParam(required = false) PolicyAdjustmentTicketStatus status,
@@ -74,8 +90,13 @@ public class SeahorsePolicyAdjustmentTicketController {
                                     @RequestParam(required = false) Long size) {
         long safeCurrent = current == null ? PolicyAdjustmentTicketQuery.DEFAULT_CURRENT : current;
         long safeSize = size == null ? PolicyAdjustmentTicketQuery.DEFAULT_PAGE_SIZE : size;
-        return ApiResponses.requireService(ticketPortProvider,
-                port -> port.page(tenantId, status, safeCurrent, safeSize));
+        return ApiResponses.requireService(ticketPortProvider, port -> {
+            PolicyAdjustmentTicketPage page = port.page(tenantId, status, safeCurrent, safeSize);
+            List<String> ticketIds = page.records().stream()
+                    .map(PolicyAdjustmentTicket::ticketId)
+                    .toList();
+            return new TicketPageResponse(page, port.latestReviews(ticketIds));
+        });
     }
 
     @GetMapping("/api/policy-adjustment-tickets/{ticketId}")
@@ -102,11 +123,65 @@ public class SeahorsePolicyAdjustmentTicketController {
      */
     @PostMapping("/api/policy-adjustment-tickets/generate")
     public ApiResponse<Object> generate(@RequestBody(required = false) GenerateRequest request) {
-        GenerateRequest safe = request == null ? new GenerateRequest(null, null, null) : request;
+        GenerateRequest safe = request == null ? new GenerateRequest(null, null, null, null, null) : request;
         int limit = safe.sampleLimit() == null ? DEFAULT_SAMPLE_LIMIT
                 : Math.min(Math.max(safe.sampleLimit(), 1), MAX_SAMPLE_LIMIT);
+        // 传了这对通过率就顺带回访已落地工单；没传则只生成工单，回访交由定时任务或手动触发。
+        ReviewMeasurement measurement = new ReviewMeasurement(
+                safe.baselinePassRate(), safe.currentPassRate(), "loop-run");
         return ApiResponses.requireService(ticketPortProvider,
-                port -> port.runAndGenerateTickets(safe.tenantId(), safe.createdBy(), limit));
+                port -> port.runAndGenerateTickets(safe.tenantId(), safe.createdBy(), limit, measurement));
+    }
+
+    /**
+     * 手动触发一次回访：对所有处于 {@code APPLIED} 的工单记录"上一次改动到底有没有用"。
+     *
+     * <p>幂等：同一 {@code batchId} 重复提交不会产生第二条记录（数据库唯一约束兜底）；
+     * 距上次回访不足冷却期的工单会被跳过，跳过量在 {@code skipped} 里返回。
+     *
+     * @param request 基线/当前评测通过率与可选的批次 id；缺任一通过率则不写记录
+     */
+    @PostMapping("/api/policy-adjustment-tickets/reviews/run")
+    public ApiResponse<Object> runReviews(@RequestBody(required = false) ReviewRunRequest request) {
+        ReviewRunRequest safe = request == null ? new ReviewRunRequest(null, null, null, null) : request;
+        ReviewMeasurement measurement = new ReviewMeasurement(
+                safe.baselinePassRate(), safe.currentPassRate(),
+                safe.source() == null ? "manual" : safe.source());
+        return ApiResponses.requireService(ticketPortProvider,
+                port -> port.reviewAppliedTickets(safe.tenantId(), safe.batchId(), measurement));
+    }
+
+    /** 某张工单的回访历史，供详情抽屉展示。 */
+    @GetMapping("/api/policy-adjustment-tickets/{ticketId}/reviews")
+    public ApiResponse<Object> listReviews(@PathVariable String ticketId,
+                                           @RequestParam(required = false) Integer limit) {
+        return ApiResponses.requireService(ticketPortProvider,
+                port -> port.listReviews(ticketId, limit == null ? 20 : limit));
+    }
+
+    /**
+     * 批量通过。逐条执行，部分失败时仍返回 200，失败明细在 {@code failed} 里。
+     */
+    @PostMapping("/api/policy-adjustment-tickets/batch-approve")
+    public ApiResponse<Object> batchApprove(@RequestBody(required = false) BatchDecisionRequest request) {
+        return decideBatch(PolicyAdjustmentTicketStatus.APPROVED, request);
+    }
+
+    /**
+     * 批量驳回。驳回必须填写意见，缺意见时整批拒绝并返回 400——
+     * 否则会生成一批"被驳回但没有理由"的工单，等于把问题推回给提建议的人。
+     */
+    @PostMapping("/api/policy-adjustment-tickets/batch-reject")
+    public ApiResponse<Object> batchReject(@RequestBody(required = false) BatchDecisionRequest request) {
+        return decideBatch(PolicyAdjustmentTicketStatus.REJECTED, request);
+    }
+
+    private ApiResponse<Object> decideBatch(PolicyAdjustmentTicketStatus target,
+                                            BatchDecisionRequest request) {
+        BatchDecisionRequest safe = request == null
+                ? new BatchDecisionRequest(null, null, null) : request;
+        return ApiResponses.requireService(ticketPortProvider, port -> port.decideBatch(
+                safe.ticketIds(), target, safe.operator(), safe.comment()));
     }
 
     @PostMapping("/api/policy-adjustment-tickets/{ticketId}/approve")
@@ -153,6 +228,45 @@ public class SeahorsePolicyAdjustmentTicketController {
     public record SubmitProposalsRequest(LearningLoopReport report, String tenantId, String createdBy) {
     }
 
-    public record GenerateRequest(String tenantId, String createdBy, Integer sampleLimit) {
+    /**
+     * @param baselinePassRate 可选；与 currentPassRate 同时给出时，跑闭环之外还会顺带回访已落地工单
+     * @param currentPassRate  可选
+     */
+    public record GenerateRequest(String tenantId,
+                                  String createdBy,
+                                  Integer sampleLimit,
+                                  Double baselinePassRate,
+                                  Double currentPassRate) {
+
+        public GenerateRequest(String tenantId, String createdBy, Integer sampleLimit) {
+            this(tenantId, createdBy, sampleLimit, null, null);
+        }
+    }
+
+    /**
+     * @param batchId 回访批次；不传则服务端现生成一个（此时同一批次重复提交无法去重，
+     *                只能靠冷却期兜底）。定时任务务必传按时间分桶的稳定值。
+     */
+    public record ReviewRunRequest(String tenantId,
+                                   String batchId,
+                                   Double baselinePassRate,
+                                   Double currentPassRate,
+                                   String source) {
+
+        public ReviewRunRequest(String tenantId, String batchId, Double baselinePassRate, Double currentPassRate) {
+            this(tenantId, batchId, baselinePassRate, currentPassRate, null);
+        }
+    }
+
+    public record BatchDecisionRequest(List<String> ticketIds, String operator, String comment) {
+    }
+
+    /**
+     * 列表页响应：分页数据 + 本页每张工单最近一次回访。
+     *
+     * @param latestReviews ticketId → 最近一次回访；从未回访过的工单不在 map 里
+     */
+    public record TicketPageResponse(PolicyAdjustmentTicketPage page,
+                                     Map<String, PolicyAdjustmentTicketReview> latestReviews) {
     }
 }

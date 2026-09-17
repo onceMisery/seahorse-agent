@@ -26,6 +26,7 @@ import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcIntentTreeRepo
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcMessageFeedbackRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcOutboxEventRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPolicyAdjustmentTicketAdapter;
+import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcPolicyAdjustmentTicketReviewAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcQueryTermMappingRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRagTraceRepositoryAdapter;
 import com.miracle.ai.seahorse.agent.adapters.repository.jdbc.JdbcRoleCardRepositoryAdapter;
@@ -40,6 +41,7 @@ import com.miracle.ai.seahorse.agent.ports.outbound.feedback.MessageFeedbackRepo
 import com.miracle.ai.seahorse.agent.ports.outbound.intent.IntentTreeRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketReviewRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mapping.QueryTermMappingRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.mq.OutboxEventRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.plugin.AgentExtensionStatusPort;
@@ -133,6 +135,20 @@ public class SeahorseAgentOpsRepositoryAutoConfiguration {
     @ConditionalOnMissingBean(MessageFeedbackRepositoryPort.class)
     public JdbcMessageFeedbackRepositoryAdapter seahorseJdbcMessageFeedbackRepositoryAdapter(DataSource dataSource) {
         return new JdbcMessageFeedbackRepositoryAdapter(dataSource);
+    }
+
+    /**
+     * 回访记录仓储。与工单仓储一样用同一个 DataSource，未配置持久化时
+     * 内核侧会拿 {@code empty()} 兜底，回访降级为"不落库"，不会让装配失败。
+     */
+    @Bean
+    @ConditionalOnBean(DataSource.class)
+    @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.adapters.repository", name = "type",
+            havingValue = "jdbc", matchIfMissing = true)
+    @ConditionalOnMissingBean(PolicyAdjustmentTicketReviewRepositoryPort.class)
+    public JdbcPolicyAdjustmentTicketReviewAdapter seahorseJdbcPolicyAdjustmentTicketReviewAdapter(
+            DataSource dataSource) {
+        return new JdbcPolicyAdjustmentTicketReviewAdapter(dataSource);
     }
 
     /**

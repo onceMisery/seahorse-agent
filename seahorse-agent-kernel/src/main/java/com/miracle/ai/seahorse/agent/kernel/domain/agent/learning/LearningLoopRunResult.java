@@ -29,9 +29,15 @@ import java.util.Objects;
  *
  * @param report  本次闭环报告，永远不为 null（数据源缺失时是空报告）
  * @param tickets 本次新建的工单；因指纹重复而未新建的不包含在内
+ * @param review  本次顺带执行的回访结果；未执行回访时为 null
  */
 public record LearningLoopRunResult(LearningLoopReport report,
-                                    List<PolicyAdjustmentTicket> tickets) {
+                                    List<PolicyAdjustmentTicket> tickets,
+                                    PolicyAdjustmentTicketReviewRunResult review) {
+
+    public LearningLoopRunResult(LearningLoopReport report, List<PolicyAdjustmentTicket> tickets) {
+        this(report, tickets, null);
+    }
 
     public LearningLoopRunResult {
         report = Objects.requireNonNullElseGet(report,

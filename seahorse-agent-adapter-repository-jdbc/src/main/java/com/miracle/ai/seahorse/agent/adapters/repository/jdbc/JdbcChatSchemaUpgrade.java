@@ -157,6 +157,7 @@ public class JdbcChatSchemaUpgrade {
         ensureLayeredMemoryLifecycleColumns();
         ensureLearningSignalColumns();
         ensurePolicyAdjustmentTicketTable();
+        ensurePolicyAdjustmentTicketReviewTable();
     }
 
     private void ensureTaskTable() {
@@ -1087,6 +1088,38 @@ public class JdbcChatSchemaUpgrade {
         jdbcTemplate.execute("""
                 CREATE INDEX IF NOT EXISTS idx_policy_ticket_fingerprint
                     ON sa_policy_adjustment_ticket (tenant_id, fingerprint)
+                """);
+    }
+
+    /**
+     * 回访记录表。{@code (ticket_id, batch_id)} 上的唯一约束是批次幂等的最后一道防线：
+     * 应用层的"先查再写"在并发下拦不住重复，写入统一走 {@code ON CONFLICT DO NOTHING}。
+     */
+    private void ensurePolicyAdjustmentTicketReviewTable() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS sa_policy_adjustment_ticket_review (
+                    pk_id              BIGSERIAL PRIMARY KEY,
+                    review_id          VARCHAR(64)  NOT NULL,
+                    ticket_id          VARCHAR(64)  NOT NULL,
+                    tenant_id          VARCHAR(64)  NOT NULL DEFAULT 'default',
+                    batch_id           VARCHAR(64)  NOT NULL,
+                    outcome            VARCHAR(32)  NOT NULL,
+                    detail             TEXT,
+                    baseline_pass_rate DOUBLE PRECISION,
+                    current_pass_rate  DOUBLE PRECISION,
+                    source             VARCHAR(64),
+                    create_time        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uk_sa_policy_review_id UNIQUE (review_id),
+                    CONSTRAINT uk_sa_policy_review_batch UNIQUE (ticket_id, batch_id)
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sa_policy_review_ticket
+                    ON sa_policy_adjustment_ticket_review (ticket_id, create_time DESC)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sa_policy_review_tenant
+                    ON sa_policy_adjustment_ticket_review (tenant_id, create_time DESC)
                 """);
     }
 

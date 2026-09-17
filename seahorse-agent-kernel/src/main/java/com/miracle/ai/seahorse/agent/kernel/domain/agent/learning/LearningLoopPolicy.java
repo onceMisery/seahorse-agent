@@ -17,6 +17,7 @@
 
 package com.miracle.ai.seahorse.agent.kernel.domain.agent.learning;
 
+import java.time.Duration;
 import java.util.Objects;
 
 /**
@@ -33,6 +34,7 @@ public final class LearningLoopPolicy {
     private static final int DEFAULT_MAX_PROPOSALS = 5;
     private static final double DEFAULT_CONFIDENCE_STEP = 0.05D;
     private static final double DEFAULT_EVAL_IMPROVEMENT_THRESHOLD = 0.02D;
+    private static final Duration DEFAULT_REVIEW_COOLDOWN = Duration.ofHours(12);
 
     private final int minSamples;
     private final double disapprovalRateThreshold;
@@ -40,6 +42,7 @@ public final class LearningLoopPolicy {
     private final int maxProposals;
     private final double confidenceStep;
     private final double evalImprovementThreshold;
+    private final Duration reviewCooldown;
 
     private LearningLoopPolicy(Builder b) {
         this.minSamples = requirePositive(b.minSamples, "minSamples");
@@ -51,6 +54,7 @@ public final class LearningLoopPolicy {
         this.maxProposals = requirePositive(b.maxProposals, "maxProposals");
         this.confidenceStep = ratio(b.confidenceStep, "confidenceStep");
         this.evalImprovementThreshold = ratio(b.evalImprovementThreshold, "evalImprovementThreshold");
+        this.reviewCooldown = requireNotNegative(b.reviewCooldown, "reviewCooldown");
     }
 
     public int minSamples() {
@@ -77,6 +81,17 @@ public final class LearningLoopPolicy {
         return evalImprovementThreshold;
     }
 
+    /**
+     * 同一张已落地工单两次回访之间的最小间隔，默认 12 小时。
+     *
+     * <p>这是回访幂等的第一道防线：反馈信号要好几天才追得上一次配置调整，
+     * 而"运行闭环"是可以被人反复点的。没有冷却期，连点十次就会落十条
+     * 数值完全相同的回访记录，把"上一次改动的效果"这个结论稀释成噪声。
+     */
+    public Duration reviewCooldown() {
+        return reviewCooldown;
+    }
+
     public static LearningLoopPolicy defaults() {
         return builder().build();
     }
@@ -99,6 +114,13 @@ public final class LearningLoopPolicy {
         return value;
     }
 
+    private static Duration requireNotNegative(Duration value, String name) {
+        if (value == null || value.isNegative()) {
+            throw new IllegalArgumentException(name + " 必须 >= 0");
+        }
+        return value;
+    }
+
     public static final class Builder {
         private int minSamples = DEFAULT_MIN_SAMPLES;
         private double disapprovalRateThreshold = DEFAULT_DISAPPROVAL_RATE_THRESHOLD;
@@ -106,6 +128,7 @@ public final class LearningLoopPolicy {
         private int maxProposals = DEFAULT_MAX_PROPOSALS;
         private double confidenceStep = DEFAULT_CONFIDENCE_STEP;
         private double evalImprovementThreshold = DEFAULT_EVAL_IMPROVEMENT_THRESHOLD;
+        private Duration reviewCooldown = DEFAULT_REVIEW_COOLDOWN;
 
         public Builder minSamples(int minSamples) {
             this.minSamples = minSamples;
@@ -134,6 +157,11 @@ public final class LearningLoopPolicy {
 
         public Builder evalImprovementThreshold(double evalImprovementThreshold) {
             this.evalImprovementThreshold = evalImprovementThreshold;
+            return this;
+        }
+
+        public Builder reviewCooldown(Duration reviewCooldown) {
+            this.reviewCooldown = reviewCooldown;
             return this;
         }
 

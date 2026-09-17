@@ -1629,6 +1629,29 @@ CREATE INDEX IF NOT EXISTS idx_policy_ticket_tenant_status
 CREATE INDEX IF NOT EXISTS idx_policy_ticket_fingerprint
   ON sa_policy_adjustment_ticket(tenant_id, fingerprint);
 
+-- 已落地工单的回访记录（append-only，(ticket_id, batch_id) 唯一以保证批次幂等）
+CREATE TABLE IF NOT EXISTS sa_policy_adjustment_ticket_review (
+    pk_id              BIGSERIAL PRIMARY KEY,
+    review_id          VARCHAR(64)  NOT NULL,
+    ticket_id          VARCHAR(64)  NOT NULL,
+    tenant_id          VARCHAR(64)  NOT NULL DEFAULT 'default',
+    batch_id           VARCHAR(64)  NOT NULL,
+    outcome            VARCHAR(32)  NOT NULL,
+    detail             TEXT,
+    baseline_pass_rate DOUBLE PRECISION,
+    current_pass_rate  DOUBLE PRECISION,
+    source             VARCHAR(64),
+    create_time        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_sa_policy_review_id UNIQUE (review_id),
+    CONSTRAINT uk_sa_policy_review_batch UNIQUE (ticket_id, batch_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sa_policy_review_ticket
+  ON sa_policy_adjustment_ticket_review(ticket_id, create_time DESC);
+
+CREATE INDEX IF NOT EXISTS idx_sa_policy_review_tenant
+  ON sa_policy_adjustment_ticket_review(tenant_id, create_time DESC);
+
 CREATE INDEX IF NOT EXISTS idx_sa_approval_request_rollout
   ON sa_approval_request(tenant_id, agent_id, rollout_id, requested_at);
 

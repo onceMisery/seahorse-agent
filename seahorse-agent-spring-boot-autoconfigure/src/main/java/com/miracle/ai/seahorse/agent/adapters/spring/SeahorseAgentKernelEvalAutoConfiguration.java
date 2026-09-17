@@ -36,6 +36,8 @@ import com.miracle.ai.seahorse.agent.ports.outbound.memory.MemoryReviewFeedbackR
 import com.miracle.ai.seahorse.agent.ports.inbound.learning.PolicyAdjustmentTicketManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketQueryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketReviewRepositoryPort;
+import com.miracle.ai.seahorse.agent.ports.outbound.coordination.DistributedLockPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.cache.RateLimiterPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.conversation.ConversationAttachmentRepositoryPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.ingestion.DocumentParserPort;
@@ -69,6 +71,9 @@ import org.springframework.core.env.Environment;
         SeahorseAgentAiAdapterAutoConfiguration.class
 })
 @EnableConfigurationProperties({RoutingProperties.class, LearningLoopProperties.class})
+// 回访定时任务需要调度能力。这里只在"本配置生效"时才开启，且真正的 job bean 还受
+// review-cron 的条件约束——没有配 cron 时不会注册任何 @Scheduled 方法。
+@org.springframework.scheduling.annotation.EnableScheduling
 @ConditionalOnSeahorseAgentProperty(prefix = "seahorse-agent.kernel", name = "enabled", havingValue = "true",
         matchIfMissing = true)
 public class SeahorseAgentKernelEvalAutoConfiguration {
@@ -152,6 +157,7 @@ public class SeahorseAgentKernelEvalAutoConfiguration {
             ObjectProvider<PolicyAdjustmentTicketQueryPort> queryPort,
             ObjectProvider<FeedbackEvaluationCandidateQueryPort> feedbackQuery,
             ObjectProvider<MemoryReviewFeedbackRepositoryPort> reviewRepository,
+            ObjectProvider<PolicyAdjustmentTicketReviewRepositoryPort> reviewTicketRepository,
             LearningLoopProperties properties) {
         // 闭环取样端口同样是可选的：没接数据源时"生成工单"返回空报告而不是启动失败。
         FeedbackEvaluationCandidateQueryPort safeFeedback =
@@ -164,7 +170,36 @@ public class SeahorseAgentKernelEvalAutoConfiguration {
                 repository.getIfAvailable(PolicyAdjustmentTicketRepositoryPort::empty),
                 queryPort.getIfAvailable(PolicyAdjustmentTicketQueryPort::empty),
                 java.time.Clock.systemUTC(),
-                runner);
+                runner,
+                reviewTicketRepository.getIfAvailable(PolicyAdjustmentTicketReviewRepositoryPort::empty),
+                properties == null ? null : properties.toPolicy());
+    }
+
+    /**
+     * 回访的定时兜底任务。<b>只有配了 {@code seahorse-agent.learning-loop.review-cron} 才装配</b>——
+     * 回访的默认触发方式是"跑一次闭环时顺带回访"，定时只是给长期没人跑闭环的场景兜底。
+     *
+     * <p>测量来源做成可替换的 Bean：内核没有评测数据源的端口，这里不给它硬塞一个，
+     * 而是让接入了评测系统的适配层提供一个 {@code Function<String, ReviewMeasurement>}；
+     * 没有提供时默认"不可测量"，回访会被跳过而不是写出一堆无信息量的记录。
+     */
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+            prefix = "seahorse-agent.learning-loop", name = "review-cron")
+    @ConditionalOnMissingBean
+    public SeahorseLearningLoopReviewJob seahorseLearningLoopReviewJob(
+            PolicyAdjustmentTicketManagementInboundPort ticketPort,
+            ObjectProvider<java.util.function.Function<String,
+                    com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.ReviewMeasurement>> measurementSource,
+            ObjectProvider<DistributedLockPort> lockPort,
+            LearningLoopProperties properties) {
+        return new SeahorseLearningLoopReviewJob(
+                ticketPort,
+                measurementSource.getIfAvailable(),
+                lockPort.getIfAvailable(DistributedLockPort::noop),
+                properties == null || properties.getReviewTenantId() == null
+                        ? "default" : properties.getReviewTenantId(),
+                java.time.Clock.systemUTC());
     }
 
     @Bean

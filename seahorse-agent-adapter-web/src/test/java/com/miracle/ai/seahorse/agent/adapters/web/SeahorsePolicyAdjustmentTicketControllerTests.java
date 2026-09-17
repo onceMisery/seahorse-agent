@@ -21,8 +21,12 @@ import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopRe
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.LearningLoopRunResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentProposal;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicket;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketBatchDecisionResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketNotFoundException;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketReview;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketReviewRunResult;
 import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PolicyAdjustmentTicketStatus;
+import com.miracle.ai.seahorse.agent.kernel.domain.agent.learning.PreviousProposalOutcome;
 import com.miracle.ai.seahorse.agent.ports.inbound.learning.PolicyAdjustmentTicketManagementInboundPort;
 import com.miracle.ai.seahorse.agent.ports.outbound.learning.PolicyAdjustmentTicketPage;
 import org.junit.jupiter.api.Test;
@@ -34,6 +38,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -65,6 +70,7 @@ class SeahorsePolicyAdjustmentTicketControllerTests {
     void shouldPageTicketsWithCamelCaseFields() throws Exception {
         when(port.page(eq("default"), eq(PolicyAdjustmentTicketStatus.PENDING), anyLong(), anyLong()))
                 .thenReturn(new PolicyAdjustmentTicketPage(List.of(pendingTicket()), 1L, 10L, 1L, 1L));
+        when(port.latestReviews(any())).thenReturn(Map.of());
 
         mvc().perform(get("/api/policy-adjustment-tickets")
                         .param("tenantId", "default")
@@ -73,13 +79,103 @@ class SeahorsePolicyAdjustmentTicketControllerTests {
                         .param("size", "10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0"))
-                .andExpect(jsonPath("$.data.total").value(1))
-                .andExpect(jsonPath("$.data.records[0].ticketId").value("pat-1"))
-                .andExpect(jsonPath("$.data.records[0].targetKey").value("user:preference:language"))
-                .andExpect(jsonPath("$.data.records[0].policyKey").value("memory.captureAcceptThreshold"))
-                .andExpect(jsonPath("$.data.records[0].direction").value("TIGHTEN"))
-                .andExpect(jsonPath("$.data.records[0].disapprovalRate").value(0.72))
-                .andExpect(jsonPath("$.data.records[0].sampleCount").value(18));
+                .andExpect(jsonPath("$.data.page.total").value(1))
+                .andExpect(jsonPath("$.data.page.records[0].ticketId").value("pat-1"))
+                .andExpect(jsonPath("$.data.page.records[0].targetKey").value("user:preference:language"))
+                .andExpect(jsonPath("$.data.page.records[0].policyKey").value("memory.captureAcceptThreshold"))
+                .andExpect(jsonPath("$.data.page.records[0].direction").value("TIGHTEN"))
+                .andExpect(jsonPath("$.data.page.records[0].disapprovalRate").value(0.72))
+                .andExpect(jsonPath("$.data.page.records[0].sampleCount").value(18));
+    }
+
+    @Test
+    void shouldCarryLatestReviewIntoThePageResponse() throws Exception {
+        when(port.page(eq("default"), isNull(), anyLong(), anyLong()))
+                .thenReturn(new PolicyAdjustmentTicketPage(List.of(pendingTicket()), 1L, 10L, 1L, 1L));
+        when(port.latestReviews(any())).thenReturn(Map.of("pat-1", review("pat-1")));
+
+        mvc().perform(get("/api/policy-adjustment-tickets").param("tenantId", "default"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.latestReviews.pat-1.outcome").value("REGRESSED"))
+                // rollbackRecommended 是派生判定（outcome == REGRESSED），不进 JSON——
+                // 前端按 outcome 自己算，避免"记录里存了布尔、枚举却又不一致"的两处真相
+                .andExpect(jsonPath("$.data.latestReviews.pat-1.rollbackRecommended").doesNotExist());
+    }
+
+    @Test
+    void shouldRunReviewAndReportSkipCounts() throws Exception {
+        when(port.reviewAppliedTickets(eq("default"), eq("batch-1"), any()))
+                .thenReturn(new PolicyAdjustmentTicketReviewRunResult(
+                        List.of(review("pat-1")), 3, 1, "扫描 3 张，写入 1 条，跳过 1 张"));
+
+        mvc().perform(post("/api/policy-adjustment-tickets/reviews/run")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tenantId\": \"default\", \"batchId\": \"batch-1\","
+                                + " \"baselinePassRate\": 0.6, \"currentPassRate\": 0.5}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.reviews[0].ticketId").value("pat-1"))
+                .andExpect(jsonPath("$.data.scanned").value(3))
+                .andExpect(jsonPath("$.data.skipped").value(1));
+    }
+
+    @Test
+    void shouldListReviewHistoryForOneTicket() throws Exception {
+        when(port.listReviews("pat-1", 20)).thenReturn(List.of(review("pat-1")));
+
+        mvc().perform(get("/api/policy-adjustment-tickets/pat-1/reviews"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].outcome").value("REGRESSED"))
+                .andExpect(jsonPath("$.data[0].reviewedAt").exists());
+    }
+
+    @Test
+    void shouldApproveBatchAndReturnPerTicketOutcome() throws Exception {
+        when(port.decideBatch(any(), eq(PolicyAdjustmentTicketStatus.APPROVED), eq("alice"), eq("同意")))
+                .thenReturn(new PolicyAdjustmentTicketBatchDecisionResult(
+                        PolicyAdjustmentTicketStatus.APPROVED, List.of("pat-1"), List.of()));
+
+        mvc().perform(post("/api/policy-adjustment-tickets/batch-approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ticketIds\": [\"pat-1\"], \"operator\": \"alice\", \"comment\": \"同意\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.targetStatus").value("APPROVED"))
+                .andExpect(jsonPath("$.data.succeededTicketIds[0]").value("pat-1"))
+                .andExpect(jsonPath("$.data.failed").isEmpty())
+                .andExpect(jsonPath("$.data.succeededTicketIds.length()").value(1));
+    }
+
+    @Test
+    void shouldReturnOkWithFailedDetailsOnPartialFailure() throws Exception {
+        // 部分失败不能是 500：前端需要逐条展示"哪张失败了、为什么"
+        when(port.decideBatch(any(), eq(PolicyAdjustmentTicketStatus.REJECTED), eq("alice"), eq("不采纳")))
+                .thenReturn(new PolicyAdjustmentTicketBatchDecisionResult(
+                        PolicyAdjustmentTicketStatus.REJECTED,
+                        List.of("pat-1"),
+                        List.of(new PolicyAdjustmentTicketBatchDecisionResult.Failure(
+                                "pat-2", "工单状态已被其他审批人变更，请刷新后重试"))));
+
+        mvc().perform(post("/api/policy-adjustment-tickets/batch-reject")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ticketIds\": [\"pat-1\", \"pat-2\"],"
+                                + " \"operator\": \"alice\", \"comment\": \"不采纳\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data.succeededTicketIds[0]").value("pat-1"))
+                .andExpect(jsonPath("$.data.failed[0].ticketId").value("pat-2"))
+                .andExpect(jsonPath("$.data.failed[0].reason").value("工单状态已被其他审批人变更，请刷新后重试"));
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenBatchTargetUnsupported() throws Exception {
+        when(port.decideBatch(any(), any(), any(), any()))
+                .thenThrow(new IllegalArgumentException("批量审批只支持通过或驳回"));
+
+        mvc().perform(post("/api/policy-adjustment-tickets/batch-approve")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ticketIds\": [\"pat-1\"], \"targetStatus\": \"APPLIED\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
     }
 
     @Test
@@ -126,7 +222,7 @@ class SeahorsePolicyAdjustmentTicketControllerTests {
 
     @Test
     void shouldClampSampleLimitBeforeRunningTheLoop() throws Exception {
-        when(port.runAndGenerateTickets(isNull(), isNull(), anyInt()))
+        when(port.runAndGenerateTickets(isNull(), isNull(), anyInt(), any()))
                 .thenReturn(new LearningLoopRunResult(new LearningLoopReport(null, List.of(), List.of(), null, ""),
                         List.of(pendingTicket())));
 
@@ -137,12 +233,12 @@ class SeahorsePolicyAdjustmentTicketControllerTests {
                 .andExpect(jsonPath("$.code").value("0"))
                 .andExpect(jsonPath("$.data.tickets[0].ticketId").value("pat-1"));
 
-        verify(port).runAndGenerateTickets(null, null, 1000);
+        verify(port).runAndGenerateTickets(isNull(), isNull(), eq(1000), any());
     }
 
     @Test
     void shouldRejectNonPositiveSampleLimit() throws Exception {
-        when(port.runAndGenerateTickets(isNull(), isNull(), anyInt()))
+        when(port.runAndGenerateTickets(isNull(), isNull(), anyInt(), any()))
                 .thenReturn(new LearningLoopRunResult(null, List.of()));
 
         mvc().perform(post("/api/policy-adjustment-tickets/generate")
@@ -151,7 +247,7 @@ class SeahorsePolicyAdjustmentTicketControllerTests {
                 .andExpect(status().isOk());
 
         // 下限夹到 1，不会因为负数把整张表拖进来
-        verify(port).runAndGenerateTickets(null, null, 1);
+        verify(port).runAndGenerateTickets(isNull(), isNull(), eq(1), any());
     }
 
     private static PolicyAdjustmentTicket pendingTicket() {
@@ -165,6 +261,13 @@ class SeahorsePolicyAdjustmentTicketControllerTests {
                 "连续三轮被点踩且复核被拒",
                 List.of("msg-1", "msg-2"));
         return PolicyAdjustmentTicket.pending("pat-1", "default", proposal, "fp-1", "learning-loop", NOW);
+    }
+
+    private static PolicyAdjustmentTicketReview review(String ticketId) {
+        return new PolicyAdjustmentTicketReview(
+                "par-1", ticketId, "default", "batch-1",
+                PreviousProposalOutcome.Status.REGRESSED, "通过率下降 10.0%，建议回滚",
+                0.70D, 0.60D, "eval", NOW);
     }
 
     private MockMvc mvc() {

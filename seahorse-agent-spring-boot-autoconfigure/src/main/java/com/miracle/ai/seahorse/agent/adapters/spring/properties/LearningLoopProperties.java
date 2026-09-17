@@ -42,6 +42,15 @@ public class LearningLoopProperties {
     private Double confidenceStep;
     /** 判定"改进/回归"的通过率变化阈值，默认 0.02。 */
     private Double evalImprovementThreshold;
+    /** 同一张已落地工单两次回访之间的最小间隔，默认 12h。 */
+    private java.time.Duration reviewCooldown;
+    /**
+     * 回访定时任务的 cron。<b>留空即不装配定时任务</b>——回访默认由"跑一次闭环"顺带触发
+     * （事件驱动），定时只是给"很久没人点运行闭环"的兜底。
+     */
+    private String reviewCron;
+    /** 定时任务回访哪个租户，默认 default。 */
+    private String reviewTenantId;
 
     public Integer getMinSamples() {
         return minSamples;
@@ -91,6 +100,30 @@ public class LearningLoopProperties {
         this.evalImprovementThreshold = evalImprovementThreshold;
     }
 
+    public java.time.Duration getReviewCooldown() {
+        return reviewCooldown;
+    }
+
+    public void setReviewCooldown(java.time.Duration reviewCooldown) {
+        this.reviewCooldown = reviewCooldown;
+    }
+
+    public String getReviewCron() {
+        return reviewCron;
+    }
+
+    public void setReviewCron(String reviewCron) {
+        this.reviewCron = reviewCron;
+    }
+
+    public String getReviewTenantId() {
+        return reviewTenantId;
+    }
+
+    public void setReviewTenantId(String reviewTenantId) {
+        this.reviewTenantId = reviewTenantId;
+    }
+
     public LearningLoopPolicy toPolicy() {
         LearningLoopPolicy.Builder builder = LearningLoopPolicy.builder();
         if (minSamples != null) {
@@ -110,6 +143,9 @@ public class LearningLoopProperties {
         }
         if (evalImprovementThreshold != null) {
             builder.evalImprovementThreshold(evalImprovementThreshold);
+        }
+        if (reviewCooldown != null) {
+            builder.reviewCooldown(reviewCooldown);
         }
         return builder.build();
     }

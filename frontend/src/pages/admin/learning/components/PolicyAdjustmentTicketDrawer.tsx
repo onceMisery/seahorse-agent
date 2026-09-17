@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
+  listPolicyAdjustmentTicketReviews,
+  isRollbackRecommended,
+  REVIEW_OUTCOME_LABELS,
   TICKET_DIRECTION_LABELS,
   TICKET_STATUS_LABELS,
   type PolicyAdjustmentTicket,
+  type PolicyAdjustmentTicketReview,
   type PolicyAdjustmentTicketStatus,
   type TicketDecisionAction
 } from "@/services/policyAdjustmentTicketService";
@@ -57,6 +61,25 @@ export function PolicyAdjustmentTicketDrawer({
     open: false,
     action: "approve"
   });
+  const [reviews, setReviews] = useState<PolicyAdjustmentTicketReview[]>([]);
+
+  const ticketId = ticket?.ticketId;
+  useEffect(() => {
+    if (!open || !ticketId) return;
+    let cancelled = false;
+    // 回访历史是非关键信息：列表页已从 latestReviews 拿到最近一条，
+    // 这里拉取失败不该让整个抽屉不可用，所以静默降级为空列表
+    listPolicyAdjustmentTicketReviews(ticketId)
+      .then((data) => {
+        if (!cancelled) setReviews(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setReviews([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, ticketId]);
 
   if (!ticket) return null;
 
@@ -181,6 +204,52 @@ export function PolicyAdjustmentTicketDrawer({
               )}
             </div>
           )}
+
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-slate-700">回访记录</h3>
+            {reviews.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                还没有回访记录。工单落地后，执行回访才会留下「这次改动到底有没有用」的结论。
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {reviews.map((review) => {
+                  const rollback = isRollbackRecommended(review);
+                  return (
+                    <li
+                      key={review.reviewId || `${review.ticketId}-${review.reviewedAt}`}
+                      className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={rollback ? "bg-red-50 text-red-700 border-red-200" : ""}
+                        >
+                          {rollback
+                            ? "建议回滚"
+                            : REVIEW_OUTCOME_LABELS[review.outcome ?? "AWAITING_MEASUREMENT"]}
+                        </Badge>
+                        <span className="text-xs text-slate-500">{formatTime(review.reviewedAt)}</span>
+                        {review.source && (
+                          <span className="text-xs text-slate-400">来源：{review.source}</span>
+                        )}
+                      </div>
+                      {review.detail && (
+                        <p className="mt-1 text-slate-700 whitespace-pre-wrap">{review.detail}</p>
+                      )}
+                      {typeof review.baselinePassRate === "number" &&
+                        typeof review.currentPassRate === "number" && (
+                          <p className="mt-1 text-xs text-slate-500">
+                            基线 {formatPercent(review.baselinePassRate)} → 当前{" "}
+                            {formatPercent(review.currentPassRate)}
+                          </p>
+                        )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
 
           {actions.length > 0 && (
             <div className="flex gap-2 pt-4 border-t">
