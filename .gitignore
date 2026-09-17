@@ -55,3 +55,7 @@ dist/
 
 # Build/test logs
 *.log
+
+# 会话期间的临时抓取/构建输出（redirect 到 .workbuddy 下的 .txt）
+# .workbuddy/memory/ 下的是项目记忆，必须保留，因此只忽略根目录的 .txt
+/.workbuddy/*.txt
